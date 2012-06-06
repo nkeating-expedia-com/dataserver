@@ -21,16 +21,17 @@
    {"parser" (bolt-spec {"drinker" :shuffle} twitter/tw-parse :p 6)
     "persister" (bolt-spec {"parser" :shuffle} (twitter/as-persist "log-persisted.txt") :p 6)}))
 
-(defn top-submit []
+(defn top-submit [host]
   (topology
-    {"rmq" (spout-spec (RMQSpout. "dataserver.submit" "prokopov.ul.js-kit.com" (int 5672)))}
+    {"rmq" (spout-spec (RMQSpout. "dataserver.submit" host (int 5672)))}
     {}))
 
-(defn run-local! []
+(defn run-local! [host]
   (let [cluster (LocalCluster.)]
-    (.submitTopology cluster "dataserver" {TOPOLOGY-DEBUG false} (mk-topology))
+    (.submitTopology cluster "dataserver" {TOPOLOGY-DEBUG false} (top-submit host))
     (Thread/sleep 60000)
     (.shutdown cluster)))
 
-(defn -main []
-   (run-local!))
+(defn -main 
+  ([] (run-local! "prokopov.ul.js-kit.com"))
+  ([host] (run-local! host)))
