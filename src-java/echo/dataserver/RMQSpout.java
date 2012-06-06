@@ -21,25 +21,19 @@ import com.rabbitmq.client.QueueingConsumer;
 public class RMQSpout extends BaseRichSpout {
 	private final Integer TIMEOUT = 100;
 
+	private String queue;
+	private String host;
+	private Integer port;
+
 	private SpoutOutputCollector collector;
 
-	private QueueingConsumer queueConsumer;
+	private transient QueueingConsumer queueConsumer;
 
 
-	public RMQSpout(String queue, String host, Integer port) throws Exception {
-		ConnectionFactory connectionFactory = new ConnectionFactory();
-		connectionFactory.setHost(host);
-		connectionFactory.setPort(port);
-
-		Connection connection = connectionFactory.newConnection();
-
-		Channel channel = connection.createChannel();
-		channel.queueDeclare(queue, false, false, false, null);
-
-		queueConsumer = new QueueingConsumer(channel);
-		channel.basicConsume(queue, true, queueConsumer);
-
-		System.out.println("RMQSpout created");
+	public RMQSpout(String queue, String host, Integer port) {
+		this.queue = queue;
+		this.host = host;
+		this.port = port;
 	}
 
 	public byte[] receive() {
@@ -50,7 +44,7 @@ public class RMQSpout extends BaseRichSpout {
 				return delivery.getBody();
 			}
 		} catch (Exception e) {
-			System.out.println("Exception - report error");
+			System.out.println("Exception - receive - report error");
 			collector.reportError(e);
 		}
 
@@ -60,6 +54,26 @@ public class RMQSpout extends BaseRichSpout {
 	@Override
 	public void open(Map conf, TopologyContext context, SpoutOutputCollector collector) {
 		this.collector = collector;
+
+		try {
+			ConnectionFactory connectionFactory = new ConnectionFactory();
+			connectionFactory.setHost(host);
+			connectionFactory.setPort(port);
+
+			Connection connection = connectionFactory.newConnection();
+
+			Channel channel = connection.createChannel();
+			channel.queueDeclare(queue, false, false, false, null);
+
+			queueConsumer = new QueueingConsumer(channel);
+			channel.basicConsume(queue, true, queueConsumer);
+		} catch (Exception e) {
+			System.out.println("Exception - open - report error");
+			collector.reportError(e);
+		}
+
+		System.out.println("RMQSpout created");
+
 	}
 
 	@Override
