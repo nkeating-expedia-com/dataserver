@@ -11,5 +11,5 @@
                  [com.rabbitmq/amqp-client "2.8.2"]
                  [com.googlecode.json-simple/json-simple "1.1"]]
   :jvm-opts     ["-Dfile.encoding=UTF-8"
-                 "-Xmx512M"])
+                 "-Xmx256M"])
                  ; "-Djava.library.path=/System/Library/Java/Extensions:/usr/local/lib:/opt/local/lib:/usr/lib"])

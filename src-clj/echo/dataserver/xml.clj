@@ -1,7 +1,16 @@
 (ns echo.dataserver.xml
   (:require [clojure.string :as str]))
+(set! *warn-on-reflection* true)
 
-(defn- escape [s]
+(def ^:dynamic *depth* 0)
+(def ^:dynamic *indent?* true)
+
+(defn- escape-quotes [s]
+  (str/escape s {
+    \' "&apos;" 
+    \" "&quot;"}))
+
+(defn- escape-body [s]
   (str/escape s {\< "&lt;"
              \> "&gt;"
              \& "&amp;"
@@ -11,33 +20,32 @@
 (defn tostr [obj]
   (cond
     (string? obj) obj
-    (nil? obj) nil
+    (nil? obj) ""
     :else (name obj)))
 
 (defn qname [tag attrs]
-  (if-let [xmlns (tostr (:ns attrs))]
-    (str xmlns ":" (tostr tag))
+  (if-let [xmlns (:ns attrs)]
+    (str (tostr xmlns) ":" (tostr tag))
     (tostr tag)))
+
+(defn print-indent []
+  (when *indent?*
+    (print "\n")
+    (dotimes [_ *depth*] (print "  "))))
 
 (defn print-attrs [attrs]
   (binding [*indent?* (> (count attrs) 1)]
     (doseq [[k v] (dissoc attrs :ns)]
       (print-indent)
-      (print (str " " (tostr k) "=\"" (escape (tostr v)) "\"")))))
+      (print (str " " (tostr k) "=\"" (escape-quotes (tostr v)) "\"")))))
 
-(def ^:dynamic *depth* 0)
-(def ^:dynamic *indent?* true)
-(defn print-indent []
-  (when *indent?*
-    (print "\n")
-    (dotimes [_ *depth*] (print "  "))))
 
 (defn xml [arg]
   (cond
     (string? arg) 
       (do
         (print-indent)
-        (print (escape arg)))
+        (print (escape-body arg)))
     (nil? arg) :ok
     :else
       (let [[tag & children] arg]
@@ -51,25 +59,25 @@
               (print "?>\n")
               (doseq [child children]
                 (xml child)))
-          (nil? children)
-            (do
-              (print-indent)
-              (print (str "<" (qname tag {}) " />")))
           (map? (first children))
             (let [attrs (first children)
                   children (next children)
+                  no-children (empty? children)
                   simple-child (and (= 1 (count children)) (not (coll? (first children))) (<= (count (dissoc attrs :ns)) 0))]
               (print-indent)
               (print "<")
               (print (qname tag attrs))
               (print-attrs attrs)
-              (print ">")
-              (binding [*depth* (inc *depth*)
+              (if (empty? children)
+                (print " />")
+                (do
+                  (print ">")
+                  (binding [*depth* (inc *depth*)
                         *indent?* (not simple-child)]
-                (doseq [child children]
-                  (xml child)))
-              (when (not simple-child)
-                (print-indent))
-              (print (str "</" (qname tag attrs) ">")))
+                    (doseq [child children]
+                      (xml child)))
+                  (when (not simple-child)
+                    (print-indent))
+                  (print (str "</" (qname tag attrs) ">")))))
           :else
             (xml (concat [tag {}] children))))))

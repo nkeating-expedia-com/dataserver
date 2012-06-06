@@ -1,4 +1,5 @@
 (ns echo.dataserver.utils)
+(set! *warn-on-reflection* true)
 
 (defmacro defthreadlocal [name & body]
  `(def ~name

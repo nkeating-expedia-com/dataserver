@@ -5,7 +5,6 @@
   (:require [clojure.string :as str]
             [clojure.data.json :as json])
   (:gen-class))
-
 (set! *warn-on-reflection* true)
 
 (defn uri-of-tweet [name id]
@@ -21,14 +20,13 @@
   (.parse ^SimpleDateFormat (.get ^ThreadLocal date-parser) str))
 
 (defn tweet->as [tweet]
-  (let [{:keys [text id in_reply_to_status_id user created_at]}  tweet
+  (let [{:keys [text id in_reply_to_status_id user created_at source] :or {source "web"}}  tweet
         {:keys [name profile_image_url]}  user
         published (parse-date created_at)
         uri (uri-of-tweet name id)]
     {:object {:content text
-              :id uri}
-     :author {:uri (uri-of-twitterer name)
-              :name name}
+              :id uri
+              :source source}
      :actor  {:id (uri-of-twitterer name)
               :title name
               :avatar profile_image_url}
@@ -63,8 +61,3 @@
     (spit out (str (pr-str as-entry) "\n") :append true)
     (ack! collector tuple)))
 
-(defn mk-topology []
-  (topology
-   {"1" (spout-spec (twitter-spout "tweets.json" "log-processed.txt"))}
-   {"2" (bolt-spec {"1" :shuffle} tw-parse :p 6)
-    "3" (bolt-spec {"2" :shuffle} (as-persist "log-persisted.txt") :p 6)}))
