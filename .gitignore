@@ -9,3 +9,6 @@ pom.xml
 .lein-failures
 .lein-plugins
 .DS_Store
+entry.xml
+log-*
+tw*.json

@@ -2,7 +2,7 @@
   :aot :all
   :java-source-paths ["src-java"]
   :source-paths      ["src-clj"]
-  :main         echo.dataserver.core
+  :main         echo.dataserver.repl
   :repl-init    echo.dataserver.repl
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [storm "0.7.2"]

@@ -5,3 +5,6 @@
     (proxy [ThreadLocal] []
       (initialValue []
         ~@body))))
+
+(defn now []
+  (java.util.Date.))

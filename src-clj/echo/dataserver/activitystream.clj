@@ -2,25 +2,22 @@
   (:require [clojure.string :as str]
             [clojure.data.json :as json]
             [clojure.data.xml :as xml])
+  (:use      echo.dataserver.utils)
+  (:import  [java.text SimpleDateFormat])
   (:gen-class))
 
-(defrecord NsElement [ns tag attrs content])
-(defn ns-element [ns tag & [attrs & content]]
-  (NsElement. ns tag (or attrs {}) (remove nil? content)))
+(defthreadlocal date-formatter
+  (doto
+    (SimpleDateFormat. "yyyy-MM-dd'T'HH:mm:ss'Z'")
+    (.setTimeZone (java.util.TimeZone/getTimeZone "GMT")))) ; "2010-03-22T11:18:21Z"
 
-(extend-protocol xml/Emit
-  NsElement
-  (xml/emit-element [e writer]
-    (let [nspace (name (:ns e))
-          qname  (name (:tag e))
-          ^javax.xml.stream.XMLStreamWriter writer writer]
-      (.writeStartElement writer (or nspace "yyy") (str "xxx" qname) nspace)
-      (xml/write-attributes e writer)
-      (doseq [c (:content e)]
-        (xml/emit-element c writer))
-      (.writeEndElement writer))))
+(defn format-date [^java.util.Date date]
+  (.format ^SimpleDateFormat (.get ^ThreadLocal date-formatter) date))
 
-(def activity-ns "activity")
+(def namespaces
+  {"activity" "http://activitystrea.ms/spec/1.0/"
+   "thr" "http://purl.org/syndication/thread/1.0"
+   "media" "http://purl.org/syndication/atommedia"})
 
 (def default-object
   {:object-type "http://activitystrea.ms/schema/1.0/comment"
@@ -37,11 +34,24 @@
         actor  (merge default-actor  actor)
         author (merge default-author author)
         entry  (merge default-entry {:object object, :actor actor, :author author})]
-    (ns-element :activity :entry {}
-      (ns-element :activity :verb {} (:verb entry))
-      (xml/element :object {}
-        (ns-element :activity :object-type {} (get-in entry [:object :object-type]))
-        (ns-element :activity :id          {} (get-in entry [:object :id]))
-        (ns-element :activity :title       {} (get-in entry [:object :title])))
-    )
-  ))
+    [:entry
+      [:published (format-date (or (:published entry) (now)))]
+      [:updated   (format-date (or (:updated entry)   (now)))]
+      [:verb {:ns :activity} (:verb entry)]
+      [:object {:ns :activity}
+        [:object-type {:ns :activity} (get-in entry [:object :object-type])]
+        [:id          {:ns :activity} (get-in entry [:object :id])]
+        [:title       {:ns :activity} (get-in entry [:object :title])]]]
+    ))
+
+(defn feed [entries]
+  [:decl "xml" {"version" "1.0" "encoding" "UTF-8"}
+    (concat 
+      [:feed {"xml:lang"       "en-US"
+              "xmlns"          "http://www.w3.org/2005/Atom"
+              "xmlns:activity" "http://activitystrea.ms/spec/1.0/"
+              "xmlns:thr"      "http://purl.org/syndication/thread/1.0"
+              "xmlns:media"    "http://purl.org/syndication/atommedia"}
+        [:updated (format-date (now))]
+        [:generator {"uri" "http://aboutecho.com/"} "DataServer (c) JackNyfe, 2012"]]
+      entries)])

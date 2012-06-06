@@ -17,21 +17,13 @@
 (defthreadlocal date-parser 
   (SimpleDateFormat. "E M d HH:mm:ss Z yyyy")) ; "Mon Jun 04 19:04:12 +0000 2012"
 
-(defthreadlocal date-formatter
-  (doto
-    (SimpleDateFormat. "yyyy-MM-dd'T'HH:mm:ss'Z'")
-    (.setTimeZone (java.util.TimeZone/getTimeZone "GMT")))) ; "2010-03-22T11:18:21Z"
-
 (defn parse-date [str]
   (.parse ^SimpleDateFormat (.get ^ThreadLocal date-parser) str))
-
-(defn format-date [date]
-  (.format ^SimpleDateFormat (.get ^ThreadLocal date-formatter) date))
 
 (defn tweet->as [tweet]
   (let [{:keys [text id in_reply_to_status_id user created_at]}  tweet
         {:keys [name profile_image_url]}  user
-        published (format-date (parse-date created_at))
+        published (parse-date created_at)
         uri (uri-of-tweet name id)]
     {:object {:content text
               :id uri}
