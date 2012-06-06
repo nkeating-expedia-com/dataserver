@@ -1,4 +1,4 @@
-package ru.juise.submitter;
+package echo.dataserver;
 
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.Connection;
@@ -28,7 +28,7 @@ public class Sender {
 		channel.queueDeclare(queue, false, false, false, null);
 
 		channel.basicPublish("", queue, null, msg.getBytes());
-		System.out.println("Sender - Ok.");
+		System.out.println("Sender - " + msg);
 
 		channel.close();
 		connection.close();

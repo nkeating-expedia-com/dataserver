@@ -1,7 +1,9 @@
-package ru.juise.submitter;
+package echo.dataserver;
 
+import java.io.IOException;
 import java.util.Map;
 
+import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.topology.OutputFieldsDeclarer;
@@ -16,12 +18,15 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.QueueingConsumer;
 
 
-public class Receiver extends BaseRichSpout {
+public class RMQSpout extends BaseRichSpout {
+	private final Integer TIMEOUT = 100;
+
 	private SpoutOutputCollector collector;
 
 	private QueueingConsumer queueConsumer;
 
-	public Receiver(String queue, String host, Integer port) throws Exception {
+
+	public RMQSpout(String queue, String host, Integer port) throws Exception {
 		ConnectionFactory connectionFactory = new ConnectionFactory();
 		connectionFactory.setHost(host);
 		connectionFactory.setPort(port);
@@ -31,15 +36,25 @@ public class Receiver extends BaseRichSpout {
 		Channel channel = connection.createChannel();
 		channel.queueDeclare(queue, false, false, false, null);
 
-		QueueingConsumer queueConsumer = new QueueingConsumer(channel);
+		queueConsumer = new QueueingConsumer(channel);
 		channel.basicConsume(queue, true, queueConsumer);
+
+		System.out.println("RMQSpout created");
 	}
 
-	public String receive() throws Exception {
-		QueueingConsumer.Delivery delivery = queueConsumer.nextDelivery();
+	public byte[] receive() {
+		try {
+			QueueingConsumer.Delivery delivery = queueConsumer.nextDelivery(TIMEOUT);
 
-		System.out.println("Receiver - " + new String(delivery.getBody()));
-		return new String(delivery.getBody());
+			if (delivery != null) {
+				return delivery.getBody();
+			}
+		} catch (Exception e) {
+			System.out.println("Exception - report error");
+			collector.reportError(e);
+		}
+
+		return null;
 	}
 
 	@Override
@@ -49,10 +64,10 @@ public class Receiver extends BaseRichSpout {
 
 	@Override
 	public void nextTuple() {
-		try {
-			collector.emit(new Values(receive()));
-		} catch (Exception e) {
-			e.printStackTrace();
+		byte[] data = receive();
+
+		if (data != null) {
+			collector.emit(new Values(data));
 		}
 	}
 
