@@ -1,9 +1,7 @@
 package echo.dataserver;
 
-import java.io.IOException;
 import java.util.Map;
 
-import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
 import backtype.storm.spout.SpoutOutputCollector;
 import backtype.storm.topology.OutputFieldsDeclarer;
@@ -44,8 +42,8 @@ public class RMQSpout extends BaseRichSpout {
 				return delivery.getBody();
 			}
 		} catch (Exception e) {
-			System.out.println("Exception - receive - report error");
-			collector.reportError(e);
+			//collector.reportError(e);
+			new RuntimeException(e);
 		}
 
 		return null;
@@ -68,12 +66,9 @@ public class RMQSpout extends BaseRichSpout {
 			queueConsumer = new QueueingConsumer(channel);
 			channel.basicConsume(queue, true, queueConsumer);
 		} catch (Exception e) {
-			System.out.println("Exception - open - report error");
-			collector.reportError(e);
+			//collector.reportError(e);
+			new RuntimeException(e);
 		}
-
-		System.out.println("RMQSpout created");
-
 	}
 
 	@Override
