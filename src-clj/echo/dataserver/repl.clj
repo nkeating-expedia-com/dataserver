@@ -12,7 +12,6 @@
     echo.dataserver.activitystream
     echo.dataserver.utils)
   (:gen-class))
-
 (set! *warn-on-reflection* true)
 
 (defn run-local! []

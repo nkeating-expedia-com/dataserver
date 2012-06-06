@@ -5,6 +5,7 @@
   (:use      echo.dataserver.utils)
   (:import  [java.text SimpleDateFormat])
   (:gen-class))
+(set! *warn-on-reflection* true)
 
 (defthreadlocal date-formatter
   (doto
@@ -20,11 +21,9 @@
    "media" "http://purl.org/syndication/atommedia"})
 
 (def default-object
-  {:object-type "http://activitystrea.ms/schema/1.0/comment"
-   :title ""})
+  {:object-type "http://activitystrea.ms/schema/1.0/note"})
 (def default-actor 
   {:object-type "http://activitystrea.ms/schema/1.0/person"})
-(def default-author {})
 (def default-entry 
   {:verb "http://activitystrea.ms/schema/1.0/post"})
 
@@ -32,16 +31,29 @@
   (let [{:keys [object actor author]} entry
         object (merge default-object object)
         actor  (merge default-actor  actor)
-        author (merge default-author author)
-        entry  (merge default-entry {:object object, :actor actor, :author author})]
+        entry  (merge default-entry {:object object, :actor actor})]
     [:entry
       [:published (format-date (or (:published entry) (now)))]
       [:updated   (format-date (or (:updated entry)   (now)))]
       [:verb {:ns :activity} (:verb entry)]
+      [:source 
+        [:provider {:ns "service"}
+          [:name "Twitter"]
+          [:uri (get-in entry [:object :id])]
+          [:icon "http://cdn.js-kit.com/images/favicons/twitter.png"]]]
       [:object {:ns :activity}
         [:object-type {:ns :activity} (get-in entry [:object :object-type])]
         [:id          {:ns :activity} (get-in entry [:object :id])]
-        [:title       {:ns :activity} (get-in entry [:object :title])]]]
+        [:content     {"type" "html"} (get-in entry [:object :content])]
+        [:link        {"rel" "alternate" "type" "text/html" "href" (get-in entry [:object :id])}]
+        [:source      {"type" "html"} (get-in entry [:object :source])]]
+      [:actor {:ns :activity}
+        [:object-type {:ns :activity} (get-in entry [:actor :object-type])]
+        [:id          (get-in entry [:actor :id])]
+        [:title       (get-in entry [:actor :title])]
+        [:link {"rel" "avatar"    "type" "image/jpeg" "href" (get-in entry [:actor :avatar])}]
+        [:link {"rel" "alternate" "type" "text/html"  "href" (get-in entry [:actor :id])}]
+      ]]
     ))
 
 (defn feed [entries]
@@ -51,7 +63,14 @@
               "xmlns"          "http://www.w3.org/2005/Atom"
               "xmlns:activity" "http://activitystrea.ms/spec/1.0/"
               "xmlns:thr"      "http://purl.org/syndication/thread/1.0"
-              "xmlns:media"    "http://purl.org/syndication/atommedia"}
+              "xmlns:media"    "http://purl.org/syndication/atommedia"
+              "xmlns:service"  "http://activitystrea.ms/service-provider"}
+        [:id "tag:twitter.com,2007:Status"]
+        [:title {"type" "text"} "Twitter status updates"]
         [:updated (format-date (now))]
-        [:generator {"uri" "http://aboutecho.com/"} "DataServer (c) JackNyfe, 2012"]]
+        [:generator {"uri" "http://aboutecho.com/"} "DataServer (c) JackNyfe, 2012"]
+        [:provider {:ns "service"}
+          [:name "jskit"]
+          [:uri "http://aboutecho.com/"]
+          [:icon "http://cdn.js-kit.com/images/echo.png"]]]
       entries)])
