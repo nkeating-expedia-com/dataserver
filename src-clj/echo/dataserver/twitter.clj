@@ -1,9 +1,9 @@
 (ns echo.dataserver.twitter
-  (:use [backtype.storm clojure log])
+  (:use [backtype.storm clojure log]
+        [echo.dataserver utils])
   (:import [java.text SimpleDateFormat])
   (:require [clojure.string :as str]
-            [clojure.data.json :as json]
-            [echo.dataserver.utils :as utils])
+            [clojure.data.json :as json])
   (:gen-class))
 
 (set! *warn-on-reflection* true)
@@ -14,19 +14,19 @@
 (defn uri-of-twitterer [name]
   (str "https://twitter.com/" name))
 
-(def date-parser (utils/threadlocal ; "Mon Jun 04 19:04:12 +0000 2012"
-  (SimpleDateFormat. "E M d HH:mm:ss Z yyyy")))
+(defthreadlocal date-parser 
+  (SimpleDateFormat. "E M d HH:mm:ss Z yyyy")) ; "Mon Jun 04 19:04:12 +0000 2012"
 
-(def date-formatter (utils/threadlocal  ; "2010-03-22T11:18:21Z"
+(defthreadlocal date-formatter
   (doto
     (SimpleDateFormat. "yyyy-MM-dd'T'HH:mm:ss'Z'")
-    (.setTimeZone (java.util.TimeZone/getTimeZone "GMT")))))
+    (.setTimeZone (java.util.TimeZone/getTimeZone "GMT")))) ; "2010-03-22T11:18:21Z"
 
 (defn parse-date [str]
-  (.parse ^SimpleDateFormat (.get date-parser) str))
+  (.parse ^SimpleDateFormat (.get ^ThreadLocal date-parser) str))
 
 (defn format-date [date]
-  (.format ^SimpleDateFormat (.get date-formatter) date))
+  (.format ^SimpleDateFormat (.get ^ThreadLocal date-formatter) date))
 
 (defn tweet->as [tweet]
   (let [{:keys [text id in_reply_to_status_id user created_at]}  tweet

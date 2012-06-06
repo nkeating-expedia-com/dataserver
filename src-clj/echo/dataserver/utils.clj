@@ -1,6 +1,7 @@
 (ns echo.dataserver.utils)
 
-(defmacro threadlocal [& body]
- `(proxy ^ThreadLocal [ThreadLocal] []
-    (initialValue []
-      ~@body)))
+(defmacro defthreadlocal [name & body]
+ `(def ~name
+    (proxy [ThreadLocal] []
+      (initialValue []
+        ~@body))))
