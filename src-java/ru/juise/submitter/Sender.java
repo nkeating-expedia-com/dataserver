@@ -6,10 +6,10 @@ import com.rabbitmq.client.Channel;
 
 
 public class Sender {
-	private String queue = "echoq";
+	private String queue;
 
-	private String host = "localhost";
-	private Integer port = 5672;
+	private String host;
+	private Integer port;
 
 	public Sender(String queue, String host, Integer port) {
 		this.queue = queue;
