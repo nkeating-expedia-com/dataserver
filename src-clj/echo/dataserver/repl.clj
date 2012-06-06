@@ -1,6 +1,7 @@
 (ns echo.dataserver.repl
   (:import
-    [backtype.storm StormSubmitter LocalCluster Config])
+    [backtype.storm StormSubmitter LocalCluster Config]
+    [echo.dataserver RMQSpout])
   (:require
     [echo.dataserver.twitter :as twitter]
     [clojure.string :as str]
@@ -14,10 +15,21 @@
   (:gen-class))
 (set! *warn-on-reflection* true)
 
+(defn mk-topology []
+  (topology
+   {"drinker" (spout-spec (twitter/twitter-spout "tweets.json" "log-processed.txt"))}
+   {"parser" (bolt-spec {"drinker" :shuffle} twitter/tw-parse :p 6)
+    "persister" (bolt-spec {"parser" :shuffle} (twitter/as-persist "log-persisted.txt") :p 6)}))
+
+(defn top-submit []
+  (topology
+    {"rmq" (spout-spec (RMQSpout. "dataserver.submit" "prokopov.ul.js-kit.com" (int 5672)))}
+    {}))
+
 (defn run-local! []
   (let [cluster (LocalCluster.)]
-    (.submitTopology cluster "dataserver" {TOPOLOGY-DEBUG false} (twitter/mk-topology))
-    (Thread/sleep 10000)
+    (.submitTopology cluster "dataserver" {TOPOLOGY-DEBUG false} (mk-topology))
+    (Thread/sleep 60000)
     (.shutdown cluster)))
 
 (defn -main []

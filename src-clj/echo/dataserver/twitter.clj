@@ -61,8 +61,3 @@
     (spit out (str (pr-str as-entry) "\n") :append true)
     (ack! collector tuple)))
 
-(defn mk-topology []
-  (topology
-   {"1" (spout-spec (twitter-spout "tweets.json" "log-processed.txt"))}
-   {"2" (bolt-spec {"1" :shuffle} tw-parse :p 6)
-    "3" (bolt-spec {"2" :shuffle} (as-persist "log-persisted.txt") :p 6)}))
