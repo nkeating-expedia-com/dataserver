@@ -24,24 +24,16 @@
 
 (defn top-submit [host]
   (topology
-    {"drink-twitter" (spout-spec (twitter/from-file "tweets.json"))
-     "drink-submit"  (spout-spec (RMQSpout. "dataserver.submit" host (int 5672)))}
+;    {"drink-twitter" (spout-spec (twitter/from-file "tweets.json"))
+    {"drink-submit"  (spout-spec (RMQSpout. "dataserver.submit" host (int 5672)))}
 
-    {"echobolt" (bolt-spec (ECHOBolt. ))})
+    {"echobolt"      (bolt-spec {"drink-submit" :shuffle} (ECHOBolt.) :p 6)}))
 
-(comment
-    {"parse-tweet"       (bolt-spec {"drink-twitter" :shuffle}     twitter/tw-parse :p 6)
-     "apply-rules"       (bolt-spec {"parse-tweet" :shuffle}       rules/apply-rules :p 6)
-<<<<<<< HEAD
-     "to-activitystream" (bolt-spec {"apply-rules" :shuffle}       activitystream/json->xml :p 6)
-     "to-submit-queue"   (bolt-spec {"to-activitystream" :shuffle} rmq/submit :p 6)
-     "to-streamserver"   (bolt-spec {"drink-submit" :shuffle}      (logger "log-submitted.txt") :p 6}))
-)
-=======
-     "to-activitystream" (bolt-spec {"apply-rules" :shuffle}       as/json->xml :p 6)
-     ; "to-submit-queue"   (bolt-spec {"to-activitystream" :shuffle} rmq/submit :p 6)
-     "to-streamserver"   (bolt-spec {"drink-submit" :shuffle}      (logger "log-submitted.txt") :p 6)}))
->>>>>>> c9a746c98ba4e2a43d9735b34014acc947da8986
+;    {"parse-tweet"       (bolt-spec {"drink-twitter" :shuffle}     twitter/tw-parse :p 6)
+;     "apply-rules"       (bolt-spec {"parse-tweet" :shuffle}       rules/apply-rules :p 6)
+;     "to-activitystream" (bolt-spec {"apply-rules" :shuffle}       as/json->xml :p 6)
+;     ; "to-submit-queue"   (bolt-spec {"to-activitystream" :shuffle} rmq/submit :p 6)
+;     "to-streamserver"   (bolt-spec {"drink-submit" :shuffle}      (logger "log-submitted.txt") :p 6)}))
 
 (defn run-local! [host]
   (let [cluster (LocalCluster.)]
