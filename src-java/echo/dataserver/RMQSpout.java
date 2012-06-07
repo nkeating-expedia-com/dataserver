@@ -45,6 +45,7 @@ public class RMQSpout extends BaseRichSpout {
 			}
 		} catch (Exception e) {
 			//collector.reportError(e);
+			System.out.println("RMQSpout exception 1");
 			new RuntimeException(e);
 		}
 
@@ -69,6 +70,7 @@ public class RMQSpout extends BaseRichSpout {
 			channel.basicConsume(queue, true, queueConsumer);
 		} catch (Exception e) {
 			//collector.reportError(e);
+			System.out.println("RMQSpout exception 2");
 			new RuntimeException(e);
 		}
 	}
@@ -78,6 +80,7 @@ public class RMQSpout extends BaseRichSpout {
 		byte[] data = receive();
 
 		if (data != null) {
+			System.out.println("RMQSpout receive/send data - " + new String(data));
 			collector.emit(new Values(data));
 		}
 	}

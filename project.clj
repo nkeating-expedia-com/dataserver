@@ -9,7 +9,8 @@
                  [org.clojure/data.json "0.1.2"]
                  [org.clojure/data.xml  "0.0.4"]
                  [com.rabbitmq/amqp-client "2.8.2"]
-                 [com.googlecode.json-simple/json-simple "1.1"]]
+                 [com.googlecode.json-simple/json-simple "1.1"]
+                 [org.scribe/scribe "1.3.0"]]
   :jvm-opts     ["-Dfile.encoding=UTF-8"
                  "-Xmx256M"])
                  ; "-Djava.library.path=/System/Library/Java/Extensions:/usr/local/lib:/opt/local/lib:/usr/lib"])
