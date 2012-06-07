@@ -80,7 +80,7 @@ public class RMQSpout extends BaseRichSpout {
 		byte[] data = receive();
 
 		if (data != null) {
-			System.out.println("RMQSpout receive/send data - " + new String(data));
+			System.out.println("RMQSpout receive/send data - " + new String(data, 0, 100) + "...");
 			collector.emit(new Values(data));
 		}
 	}

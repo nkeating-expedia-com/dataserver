@@ -14,7 +14,7 @@
   (str "https://twitter.com/" name))
 
 (defthreadlocal date-parser 
-  (SimpleDateFormat. "E M d HH:mm:ss Z yyyy")) ; "Mon Jun 04 19:04:12 +0000 2012"
+  (SimpleDateFormat. "E MMM d HH:mm:ss Z yyyy" (java.util.Locale. "en"))) ; "Mon Jun 04 19:04:12 +0000 2012"
 
 (defn parse-date [str]
   (.parse ^SimpleDateFormat (.get ^ThreadLocal date-parser) str))
@@ -29,14 +29,14 @@
 
 (defn tweet->item [tweet]
   (let [{:keys [text id  user created_at source] :or {source "web"}}  tweet
-        {:keys [name profile_image_url]}  user
+        {:keys [name screen_name profile_image_url]}  user
         published (parse-date created_at)
-        uri (uri-of-tweet name id)]
+        uri (uri-of-tweet screen_name id)]
     (->
       {:object {:content text
                 :id uri
                 :source source}
-       :actor  {:id (uri-of-twitterer name)
+       :actor  {:id (uri-of-twitterer screen_name)
                 :title name
                 :avatar profile_image_url}
        :published published

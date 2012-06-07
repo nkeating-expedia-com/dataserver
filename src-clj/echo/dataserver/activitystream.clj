@@ -1,8 +1,8 @@
 (ns echo.dataserver.activitystream
   (:require [clojure.string :as str]
-            [clojure.data.json :as json])
+            [clojure.data.json :as json]
+            [echo.dataserver.xml :as xml])
   (:use     [backtype.storm clojure]
-             echo.dataserver.xml
              echo.dataserver.utils)
   (:import  [java.text SimpleDateFormat])
   (:gen-class))
@@ -28,8 +28,8 @@
 (def default-entry 
   {:verb "http://activitystrea.ms/schema/1.0/post"})
 
-(defn entry [entry]
-  (let [{:keys [object actor author]} entry
+(defn entry [item]
+  (let [{:keys [object actor author]} item
         object (merge default-object object)
         actor  (merge default-actor  actor)
         entry  (merge default-entry {:object object, :actor actor})]
@@ -76,10 +76,16 @@
           [:icon "http://cdn.js-kit.com/images/echo.png"]]]
       entries)])
 
-(defbolt json->xml ["xml" "submit-tokens"] [tuple collector] 
+(defn json->xml [item]
+  (let [_entries [(entry item)]
+        _feed    (feed _entries)]
+    (with-out-str
+      (xml/emit-indented _feed))))
+
+(defbolt json->payload ["payload"] [tuple collector] 
   (let [item  (read-string (.getString tuple 0))
-        _feed (feed [(entry item)])
-        _xml  (with-out-str (xml feed))
-        submit-tokens (.getString tuple 1)]
-    (emit-bolt! collector [_xml submit-tokens] :anchor tuple)
+        _xml  (json->xml item)
+        submit-tokens (read-string (.getString tuple 1))
+        payload ^String (json/json-str {:xml _xml :submit-tokens submit-tokens})]
+    (emit-bolt! collector [(.getBytes payload)] :anchor tuple)
     (ack! collector tuple)))
