@@ -55,7 +55,9 @@
               (print "<?")
               (print tag)
               (print-attrs attrs)
-              (print "?>\n")
+              (print "?>")
+              (if *indent?*
+                (print "\n"))
               (doseq [child children]
                 (emit child)))
           (map? (first children))

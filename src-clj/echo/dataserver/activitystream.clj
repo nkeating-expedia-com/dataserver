@@ -28,37 +28,43 @@
 (def default-entry 
   {:verb "http://activitystrea.ms/schema/1.0/post"})
 
+(defn target [t]
+  [:target {:ns :activity}
+    [:id (:id t)]])
+
 (defn entry [item]
-  (let [{:keys [object actor author]} item
+  (let [{:keys [object actor targets]} item
         object (merge default-object object)
         actor  (merge default-actor  actor)
-        entry  (merge default-entry {:object object, :actor actor})]
-    [:entry
-      [:published (format-date (or (:published entry) (now)))]
-      [:updated   (format-date (or (:updated entry)   (now)))]
-      [:verb {:ns :activity} (:verb entry)]
-      [:source 
-        [:provider {:ns "service"}
-          [:name "Twitter"]
-          [:uri (get-in entry [:object :id])]
-          [:icon "http://cdn.js-kit.com/images/favicons/twitter.png"]]]
-      [:object {:ns :activity}
-        [:object-type {:ns :activity} (get-in entry [:object :object-type])]
-        [:id          {:ns :activity} (get-in entry [:object :id])]
-        [:content     {"type" "html"} (get-in entry [:object :content])]
-        [:link        {"rel" "alternate" "type" "text/html" "href" (get-in entry [:object :id])}]
-        [:source      {"type" "html"} (get-in entry [:object :source])]]
-      [:actor {:ns :activity}
-        [:object-type {:ns :activity} (get-in entry [:actor :object-type])]
-        [:id          (get-in entry [:actor :id])]
-        [:title       (get-in entry [:actor :title])]
-        [:link {"rel" "avatar"    "type" "image/jpeg" "href" (get-in entry [:actor :avatar])}]
-        [:link {"rel" "alternate" "type" "text/html"  "href" (get-in entry [:actor :id])}]
-      ]]
+        entry  (merge default-entry {:object object, :actor actor, :targets targets})]
+    (concat
+      [:entry
+        [:published (format-date (or (:published entry) (now)))]
+        [:updated   (format-date (or (:updated entry)   (now)))]
+        [:verb {:ns :activity} (:verb entry)]
+        [:source 
+          [:provider {:ns "service"}
+            [:name "Twitter"]
+            [:uri (get-in entry [:object :id])]
+            [:icon "http://cdn.js-kit.com/images/favicons/twitter.png"]]]
+        [:object {:ns :activity}
+          [:object-type {:ns :activity} (get-in entry [:object :object-type])]
+          [:id          {:ns :activity} (get-in entry [:object :id])]
+          [:content     {"type" "html"} (get-in entry [:object :content])]
+          [:link        {"rel" "alternate" "type" "text/html" "href" (get-in entry [:object :id])}]
+          [:source      {"type" "html"} (get-in entry [:object :source])]]
+        [:actor {:ns :activity}
+          [:object-type {:ns :activity} (get-in entry [:actor :object-type])]
+          [:id          (get-in entry [:actor :id])]
+          [:title       (get-in entry [:actor :title])]
+          [:link {"rel" "avatar"    "type" "image/jpeg" "href" (get-in entry [:actor :avatar])}]
+          [:link {"rel" "alternate" "type" "text/html"  "href" (get-in entry [:actor :id])}]
+        ]]
+      (mapv target (:targets entry)))
     ))
 
 (defn feed [entries]
-  [:decl "xml" {"version" "1.0" "encoding" "UTF-8"}
+  [:decl "xml" (array-map "version" "1.0" "encoding" "UTF-8")
     (concat 
       [:feed {"xml:lang"       "en-US"
               "xmlns"          "http://www.w3.org/2005/Atom"
@@ -71,7 +77,7 @@
         [:updated (format-date (now))]
         [:generator {"uri" "http://aboutecho.com/"} "DataServer (c) JackNyfe, 2012"]
         [:provider {:ns "service"}
-          [:name "jskit"]
+          [:name "DataServer"]
           [:uri "http://aboutecho.com/"]
           [:icon "http://cdn.js-kit.com/images/echo.png"]]]
       entries)])
@@ -80,7 +86,7 @@
   (let [_entries [(entry item)]
         _feed    (feed _entries)]
     (with-out-str
-      (xml/emit-indented _feed))))
+      (xml/emit _feed))))
 
 (defbolt json->payload ["payload"] [tuple collector] 
   (let [item  (read-string (.getString tuple 0))
