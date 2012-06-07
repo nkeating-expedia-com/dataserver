@@ -1,8 +1,8 @@
 (ns echo.dataserver.activitystream
   (:require [clojure.string :as str]
-            [clojure.data.json :as json])
+            [clojure.data.json :as json]
+            [echo.dataserver.xml :as xml])
   (:use     [backtype.storm clojure]
-             echo.dataserver.xml
              echo.dataserver.utils)
   (:import  [java.text SimpleDateFormat])
   (:gen-class))
@@ -28,32 +28,32 @@
 (def default-entry 
   {:verb "http://activitystrea.ms/schema/1.0/post"})
 
-(defn entry [entry]
-  (let [{:keys [object actor author]} entry
+(defn entry [item]
+  (let [{:keys [object actor author]} item
         object (merge default-object object)
         actor  (merge default-actor  actor)
         entry  (merge default-entry {:object object, :actor actor})]
     [:entry
-      [:published (format-date (or (:published entry) (now)))]
-      [:updated   (format-date (or (:updated entry)   (now)))]
-      [:verb {:ns :activity} (:verb entry)]
+      [:published (format-date (or (:published item) (now)))]
+      [:updated   (format-date (or (:updated item)   (now)))]
+      [:verb {:ns :activity} (:verb item)]
       [:source 
         [:provider {:ns "service"}
           [:name "Twitter"]
-          [:uri (get-in entry [:object :id])]
+          [:uri (get-in item [:object :id])]
           [:icon "http://cdn.js-kit.com/images/favicons/twitter.png"]]]
       [:object {:ns :activity}
-        [:object-type {:ns :activity} (get-in entry [:object :object-type])]
-        [:id          {:ns :activity} (get-in entry [:object :id])]
-        [:content     {"type" "html"} (get-in entry [:object :content])]
-        [:link        {"rel" "alternate" "type" "text/html" "href" (get-in entry [:object :id])}]
-        [:source      {"type" "html"} (get-in entry [:object :source])]]
+        [:object-type {:ns :activity} (get-in item [:object :object-type])]
+        [:id          {:ns :activity} (get-in item [:object :id])]
+        [:content     {"type" "html"} (get-in item [:object :content])]
+        [:link        {"rel" "alternate" "type" "text/html" "href" (get-in item [:object :id])}]
+        [:source      {"type" "html"} (get-in item [:object :source])]]
       [:actor {:ns :activity}
-        [:object-type {:ns :activity} (get-in entry [:actor :object-type])]
-        [:id          (get-in entry [:actor :id])]
-        [:title       (get-in entry [:actor :title])]
-        [:link {"rel" "avatar"    "type" "image/jpeg" "href" (get-in entry [:actor :avatar])}]
-        [:link {"rel" "alternate" "type" "text/html"  "href" (get-in entry [:actor :id])}]
+        [:object-type {:ns :activity} (get-in item [:actor :object-type])]
+        [:id          (get-in item [:actor :id])]
+        [:title       (get-in item [:actor :title])]
+        [:link {"rel" "avatar"    "type" "image/jpeg" "href" (get-in item [:actor :avatar])}]
+        [:link {"rel" "alternate" "type" "text/html"  "href" (get-in item [:actor :id])}]
       ]]
     ))
 
@@ -76,10 +76,15 @@
           [:icon "http://cdn.js-kit.com/images/echo.png"]]]
       entries)])
 
-(defbolt json->xml ["xml" "submit-tokens"] [tuple collector] 
+(defn json->xml [item]
+  (let [_entries [(entry item)]
+        _feed    (feed _entries)]
+    (with-out-str (xml/emit _feed))))
+
+(defbolt json->payload ["payload"] [tuple collector] 
   (let [item  (read-string (.getString tuple 0))
-        _feed (feed [(entry item)])
-        _xml  (with-out-str (xml feed))
-        submit-tokens (.getString tuple 1)]
-    (emit-bolt! collector [_xml submit-tokens] :anchor tuple)
+        _xml  (json->xml item)
+        submit-tokens (read-string (.getString tuple 1))
+        payload ^String (json/json-str {:xml _xml :submit-tokens submit-tokens})]
+    (emit-bolt! collector [(.getBytes payload)] :anchor tuple)
     (ack! collector tuple)))

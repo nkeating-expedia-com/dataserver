@@ -3,7 +3,7 @@
 (set! *warn-on-reflection* true)
 
 (def ^:dynamic *depth* 0)
-(def ^:dynamic *indent?* true)
+(def ^:dynamic *indent?* false)
 
 (defn- escape-quotes [s]
   (str/escape s {
@@ -34,13 +34,12 @@
     (dotimes [_ *depth*] (print "  "))))
 
 (defn print-attrs [attrs]
-  (binding [*indent?* (> (count attrs) 1)]
+  (binding [*indent?* (and *indent?* (> (count attrs) 1))]
     (doseq [[k v] (dissoc attrs :ns)]
       (print-indent)
       (print (str " " (tostr k) "=\"" (escape-quotes (tostr v)) "\"")))))
 
-
-(defn xml [arg]
+(defn emit [arg]
   (cond
     (string? arg) 
       (do
@@ -58,7 +57,7 @@
               (print-attrs attrs)
               (print "?>\n")
               (doseq [child children]
-                (xml child)))
+                (emit child)))
           (map? (first children))
             (let [attrs (first children)
                   children (next children)
@@ -73,11 +72,15 @@
                 (do
                   (print ">")
                   (binding [*depth* (inc *depth*)
-                        *indent?* (not simple-child)]
+                            *indent?* (and *indent?* (not simple-child))]
                     (doseq [child children]
-                      (xml child)))
+                      (emit child)))
                   (when (not simple-child)
                     (print-indent))
                   (print (str "</" (qname tag attrs) ">")))))
           :else
-            (xml (concat [tag {}] children))))))
+            (emit (concat [tag {}] children))))))
+
+(defn emit-indented [arg]
+  (binding [*indent?* true]
+    (emit arg)))

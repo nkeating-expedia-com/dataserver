@@ -27,7 +27,7 @@ public class ECHOBolt extends BaseRichBolt {
 
 	@Override
 	public void execute(Tuple input) {
-		System.out.println("ECHOBolt receive - " + new String((byte[])input.getValue(0)));
+		System.out.println("ECHOBolt receive - " + new String((byte[])input.getValue(0), 0, 100) + "...");
 		collector.ack(input);
 	}
 
