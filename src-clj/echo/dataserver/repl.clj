@@ -15,16 +15,22 @@
   (:gen-class))
 (set! *warn-on-reflection* true)
 
-(defn mk-topology []
-  (topology
-   {"drinker" (spout-spec (twitter/twitter-spout "tweets.json" "log-processed.txt"))}
-   {"parser" (bolt-spec {"drinker" :shuffle} twitter/tw-parse :p 6)
-    "persister" (bolt-spec {"parser" :shuffle} (twitter/as-persist "log-persisted.txt") :p 6)}))
+(defbolt logger [] {:params [out]} [tuple collector] 
+  (let [as-entry   (.getString tuple 0)
+        submit-key (.getString tuple 1)]
+    (spit out (str submit-key ": " (pr-str as-entry) "\n") :append true)
+    (ack! collector tuple)))
 
 (defn top-submit [host]
   (topology
-    {"rmq" (spout-spec (RMQSpout. "dataserver.submit" host (int 5672)))}
-    {}))
+    {"drink-twitter" (spout-spec (twitter/from-file "tweets.json"))
+     "drink-submit"  (spout-spec (RMQSpout. "dataserver.submit" host (int 5672)))}
+
+    {"parse-tweet"       (bolt-spec {"drink-twitter" :shuffle}     twitter/tw-parse :p 6)
+     "apply-rules"       (bolt-spec {"parse-tweet" :shuffle}       rules/apply-rules :p 6)
+     "to-activitystream" (bolt-spec {"apply-rules" :shuffle}       activitystream/json->xml :p 6)
+     "to-submit-queue"   (bolt-spec {"to-activitystream" :shuffle} rmq/submit :p 6)
+     "to-streamserver"   (bolt-spec {"drink-submit" :shuffle}      (logger "log-submitted.txt") :p 6}))
 
 (defn run-local! [host]
   (let [cluster (LocalCluster.)]

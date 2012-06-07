@@ -1,8 +1,8 @@
 (ns echo.dataserver.activitystream
   (:require [clojure.string :as str]
-            [clojure.data.json :as json]
-            [clojure.data.xml :as xml])
-  (:use      echo.dataserver.utils)
+            [clojure.data.json :as json])
+  (:use      echo.dataserver.xml
+             echo.dataserver.utils)
   (:import  [java.text SimpleDateFormat])
   (:gen-class))
 (set! *warn-on-reflection* true)
@@ -74,3 +74,11 @@
           [:uri "http://aboutecho.com/"]
           [:icon "http://cdn.js-kit.com/images/echo.png"]]]
       entries)])
+
+(defbolt json->xml ["xml" "submit-tokens"] [tuple collector] 
+  (let [item  (read-string (.getString tuple 0))
+        _feed (feed [(entry item)])
+        _xml  (with-out-str (xml feed))
+        submit-tokens (.getString tuple 1)]
+    (emit-bolt! collector [_xml submit-tokens] :anchor tuple)
+    (ack! collector tuple)))

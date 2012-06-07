@@ -19,22 +19,32 @@
 (defn parse-date [str]
   (.parse ^SimpleDateFormat (.get ^ThreadLocal date-parser) str))
 
-(defn tweet->as [tweet]
-  (let [{:keys [text id in_reply_to_status_id user created_at source] :or {source "web"}}  tweet
+(defn maybe-populate-reply [item tweet]
+  (let [{:keys [in_reply_to_screen_name in_reply_to_status_id]} tweet]
+    (if in_reply_to_status_id
+      (merge-with concat item
+        {:targets [
+          {:id (uri-of-tweet in_reply_to_screen_name in_reply_to_status_id)}]})
+      item)))
+
+(defn tweet->item [tweet]
+  (let [{:keys [text id  user created_at source] :or {source "web"}}  tweet
         {:keys [name profile_image_url]}  user
         published (parse-date created_at)
         uri (uri-of-tweet name id)]
-    {:object {:content text
-              :id uri
-              :source source}
-     :actor  {:id (uri-of-twitterer name)
-              :title name
-              :avatar profile_image_url}
-     :published published
-     :updated   published
-     :id        uri}))
+    (->
+      {:object {:content text
+                :id uri
+                :source source}
+       :actor  {:id (uri-of-twitterer name)
+                :title name
+                :avatar profile_image_url}
+       :published published
+       :updated   published
+       :id        uri}
+       (maybe-populate-reply tweet))))
 
-(defspout twitter-spout ["tweet"] {:params [in out] :prepared true}
+(defspout from-file ["tweet"] {:params [in out] :prepared true}
   [conf context collector]
   (let [rdr (atom (clojure.java.io/reader in))]
     (spout
@@ -50,14 +60,9 @@
         (log-message "ACKED: " id "\n")
         (spit out (str "Processed " id "\n") :append true)))))
 
-(defbolt tw-parse ["as"] [tuple collector]
+(defbolt tw-parse ["item"] [tuple collector]
   (let [tweet (json/read-json (.getString tuple 0))]
     (when (tweet :text)
-      (emit-bolt! collector [(pr-str (tweet->as tweet))] :anchor tuple)))
+      (emit-bolt! collector [(pr-str (tweet->item tweet))] :anchor tuple)))
     (ack! collector tuple))
-
-(defbolt as-persist [] {:params [out]} [tuple collector] 
-  (let [as-entry (read-string (.getString tuple 0))]
-    (spit out (str (pr-str as-entry) "\n") :append true)
-    (ack! collector tuple)))
 
