@@ -1,7 +1,8 @@
 (ns echo.dataserver.activitystream
   (:require [clojure.string :as str]
             [clojure.data.json :as json])
-  (:use      echo.dataserver.xml
+  (:use     [backtype.storm clojure]
+             echo.dataserver.xml
              echo.dataserver.utils)
   (:import  [java.text SimpleDateFormat])
   (:gen-class))

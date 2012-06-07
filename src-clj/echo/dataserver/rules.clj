@@ -1,6 +1,7 @@
 (ns echo.dataserver.rules
   (:require [clojure.string :as str]
             [clojure.data.json :as json])
+  (:use     [backtype.storm clojure])
   (:gen-class))
 (set! *warn-on-reflection* true)
 

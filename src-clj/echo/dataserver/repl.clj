@@ -4,13 +4,13 @@
     [echo.dataserver RMQSpout])
   (:require
     [echo.dataserver.twitter :as twitter]
+    [echo.dataserver.rules :as rules]
+    [echo.dataserver.activitystream :as as]
     [clojure.string :as str]
     [clojure.data.json :as json]
     [clojure.data.xml :as xml])
   (:use
     [backtype.storm clojure config log]
-    echo.dataserver.twitter
-    echo.dataserver.activitystream
     echo.dataserver.utils)
   (:gen-class))
 (set! *warn-on-reflection* true)
@@ -28,9 +28,9 @@
 
     {"parse-tweet"       (bolt-spec {"drink-twitter" :shuffle}     twitter/tw-parse :p 6)
      "apply-rules"       (bolt-spec {"parse-tweet" :shuffle}       rules/apply-rules :p 6)
-     "to-activitystream" (bolt-spec {"apply-rules" :shuffle}       activitystream/json->xml :p 6)
-     "to-submit-queue"   (bolt-spec {"to-activitystream" :shuffle} rmq/submit :p 6)
-     "to-streamserver"   (bolt-spec {"drink-submit" :shuffle}      (logger "log-submitted.txt") :p 6}))
+     "to-activitystream" (bolt-spec {"apply-rules" :shuffle}       as/json->xml :p 6)
+     ; "to-submit-queue"   (bolt-spec {"to-activitystream" :shuffle} rmq/submit :p 6)
+     "to-streamserver"   (bolt-spec {"drink-submit" :shuffle}      (logger "log-submitted.txt") :p 6)}))
 
 (defn run-local! [host]
   (let [cluster (LocalCluster.)]
