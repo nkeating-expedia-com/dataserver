@@ -36,7 +36,7 @@ public class RMQSpout extends BaseRichSpout {
 		System.out.println("RMQSpout started");
 	}
 
-	public byte[] receive() {
+	private byte[] receive() {
 		try {
 			QueueingConsumer.Delivery delivery = queueConsumer.nextDelivery(TIMEOUT);
 
@@ -80,7 +80,7 @@ public class RMQSpout extends BaseRichSpout {
 		byte[] data = receive();
 
 		if (data != null) {
-			System.out.println("RMQSpout receive/send data - " + new String(data, 0, 100) + "...");
+			//System.out.println("RMQSpout receive/send data - " + new String(data));
 			collector.emit(new Values(data));
 		}
 	}

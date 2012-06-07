@@ -39,9 +39,9 @@ public class EchoSubmitBolt extends BaseRichBolt {
 
 		try {
 			JSONObject data = (JSONObject)parser.parse(json);
-			xml = (String)data.get("xml");
-
 			JSONObject oauth = (JSONObject)data.get("submit-tokens");
+			
+			xml = (String)data.get("xml");
 			key = (String)oauth.get("key");
 			secret = (String)oauth.get("secret");
 			endpoint = (String)oauth.get("endpoint");
@@ -54,7 +54,7 @@ public class EchoSubmitBolt extends BaseRichBolt {
 		Token token = new Token("", "");
 		OAuthService service = new ServiceBuilder().apiKey(key).apiSecret(secret).provider(ECHOApi.class).build();
 
-		OAuthRequest request = new OAuthRequest(Verb.POST, endpoint);
+		OAuthRequest request = new OAuthRequest(Verb.POST, endpoint + "v1/submit");
 		request.addBodyParameter("content", xml);
 
 		service.signRequest(token, request);
@@ -71,14 +71,9 @@ public class EchoSubmitBolt extends BaseRichBolt {
 
 	@Override
 	public void execute(Tuple input) {
-		//System.out.println("ECHOBolt receive - " + new String((byte[])input.getValue(0)));
-
 		parseJSON(new String((byte[])input.getValue(0)));
+		submit();
 
-		System.out.println(xml);
-		System.out.println(key);
-		System.out.println(secret);
-		System.out.println(endpoint);
 		collector.ack(input);
 	}
 
