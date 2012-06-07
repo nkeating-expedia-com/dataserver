@@ -3,7 +3,8 @@
         [echo.dataserver utils])
   (:import [java.text SimpleDateFormat])
   (:require [clojure.string :as str]
-            [clojure.data.json :as json])
+            [clojure.data.json :as json]
+            [http.async.client :as httpc])
   (:gen-class))
 (set! *warn-on-reflection* true)
 
@@ -65,3 +66,38 @@
       (emit-bolt! collector [(pr-str (tweet->item tweet))] :anchor tuple)))
     (ack! collector tuple))
 
+(def tweets (ref []))
+(def listeners (atom {}))
+
+(defn on-tweet [state body]
+  (let [content (httpc/string body)]
+    (log-message (str "Tweet received:" content))
+    (if (not (str/blank? content))
+      (dosync (alter tweets conj content))))
+  [body :continue])
+
+(defn listen-stream [name {:keys [login passwd endpoint params]}]
+  (let [client (httpc/create-client)
+        auth   {:type :basic :user login :password passwd :preemptive true}
+        resp   (httpc/request-stream client
+                                     :post endpoint
+                                     on-tweet
+                                     :auth auth
+                                     :body params)]
+  (swap! listeners assoc name {:client client :resp resp})))
+
+(defspout from-endpoint ["tweet"] {:params [name endpoint-conf] :prepared true}
+  [conf context collector]
+
+  (listen-stream name endpoint-conf)
+
+  (spout
+    (nextTuple []
+      (dosync
+        (if-let [t (first @tweets)]
+          (do
+            (emit-spout! collector [t] :id (+ 100000 (rand-int 899999)))
+            (alter tweets rest))
+          (Thread/sleep 100))))
+    (ack [id]
+      (log-message "ACKED: " id "\n"))))

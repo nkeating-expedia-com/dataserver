@@ -9,3 +9,6 @@
 
 (defn now []
   (java.util.Date.))
+
+(defn env [v]
+  (-> (System/getenv) (.get v)))

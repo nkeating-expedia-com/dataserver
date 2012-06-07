@@ -71,7 +71,7 @@
         [:updated (format-date (now))]
         [:generator {"uri" "http://aboutecho.com/"} "DataServer (c) JackNyfe, 2012"]
         [:provider {:ns "service"}
-          [:name "jskit"]
+          [:name "DataServer"]
           [:uri "http://aboutecho.com/"]
           [:icon "http://cdn.js-kit.com/images/echo.png"]]]
       entries)])
