@@ -30,25 +30,26 @@
     (ack! collector tuple)))
 
 (defn drinkers-top []
-  (into {} (map
-    (fn [[name params]]
+  (mapmap
+    (fn [name params]
         [(str "drink-twitter-" name) 
          (spout-spec (twitter/from-endpoint name params))])
-    (config/twitter-streams))))
+    (config/twitter-streams)))
 
 (defn top-submit []
-  (topology
-    (merge
-      {} ;(drinkers-top)
-      {"drink-twitter" (spout-spec (twitter/from-file "tweets.json"))
-       "drink-submit"  (spout-spec (RMQSpout. *rmq-submit-queue* *rmq-host* *rmq-port*))})
+  (let [drinkers     (drinkers-top)
+        drinkers-out (mapmap (fn [n _] [n :shuffle]) drinkers)]
+    (topology
+      (merge drinkers
+        {;"read-twits" (spout-spec (twitter/from-file "tweets.json"))
+         "drink-submit"  (spout-spec (RMQSpout. *rmq-submit-queue* *rmq-host* *rmq-port*))})
 
-    {"parse-tweet"       (bolt-spec {"drink-twitter" :shuffle} twitter/tw-parse :p 6)
-     "apply-rules"       (bolt-spec {"parse-tweet" :shuffle}   rules/apply-rules :p 6)
-     "to-payload"        (bolt-spec {"apply-rules" :shuffle}   as/json->payload :p 6)
-     "to-submit-queue"   (bolt-spec {"to-payload" :shuffle}    (rmq/poster {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*}) :p 6)
-     "to-file"           (bolt-spec {"drink-submit" :shuffle}  (logger "log-submitted.txt") :p 6)
-     "to-submit-api"     (bolt-spec {"drink-submit" :shuffle}  (EchoSubmitBolt.) :p 6)}))
+      {"parse-tweet"       (bolt-spec drinkers-out               twitter/tw-parse :p 6)
+       "apply-rules"       (bolt-spec {"parse-tweet" :shuffle}   rules/apply-rules :p 6)
+       "to-payload"        (bolt-spec {"apply-rules" :shuffle}   as/json->payload :p 6)
+       "to-submit-queue"   (bolt-spec {"to-payload" :shuffle}    (rmq/poster {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*}) :p 6)
+       "to-file"           (bolt-spec {"drink-submit" :shuffle}  (logger "log-submitted.txt") :p 6)
+       "to-submit-api"     (bolt-spec {"drink-submit" :shuffle}  (EchoSubmitBolt.) :p 6)})))
 
 (defn run-local! []
   (let [cluster (LocalCluster.)]

@@ -69,27 +69,25 @@
 (def tweets (ref []))
 (def listeners (atom {}))
 
-(defn on-tweet [state body]
-  (let [content (httpc/string body)]
-    (log-message (str "Tweet received:" content))
-    (if (not (str/blank? content))
-      (dosync (alter tweets conj content))))
-  [body :continue])
+(defn on-tweet [content]
+  (log-message (str "Tweet received:" content))
+  (if (not (str/blank? content))
+    (dosync (alter tweets conj content))))
 
-(defn listen-stream [name {:keys [login passwd endpoint params]}]
-  (let [client (httpc/create-client)
+(defn read-stream [endpoint-conf]
+  (let [{:keys [login passwd endpoint params]} endpoint-conf
         auth   {:type :basic :user login :password passwd :preemptive true}
-        resp   (httpc/request-stream client
-                                     :post endpoint
-                                     on-tweet
-                                     :auth auth
-                                     :body params)]
-  (swap! listeners assoc name {:client client :resp resp})))
+        client (httpc/create-client :auth auth)
+        resp   (httpc/stream-seq client :post endpoint :body params)]
+    (doseq [s (httpc/string resp)]
+      (on-tweet s))))
 
 (defspout from-endpoint ["tweet"] {:params [name endpoint-conf] :prepared true}
   [conf context collector]
 
-  (listen-stream name endpoint-conf)
+  (let [t (Thread. #(read-stream endpoint-conf))]
+    (.start t)
+    (swap! listeners assoc name t))
 
   (spout
     (nextTuple []

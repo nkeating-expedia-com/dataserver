@@ -12,3 +12,6 @@
 
 (defn env [v]
   (-> (System/getenv) (.get v)))
+
+(defn mapmap [f m]
+  (into {} (mapv (fn [[k v]] (f k v)) m)))
