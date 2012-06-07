@@ -17,6 +17,7 @@ public class ECHOBolt extends BaseRichBolt {
 
 
 	public ECHOBolt() {
+		System.out.println("ECHOBolt started");
 	}
 
 	@Override
@@ -26,6 +27,7 @@ public class ECHOBolt extends BaseRichBolt {
 
 	@Override
 	public void execute(Tuple input) {
+		System.out.println(input.getString(0));
 		collector.ack(input);
 	}
 

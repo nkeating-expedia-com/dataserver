@@ -32,6 +32,8 @@ public class RMQSpout extends BaseRichSpout {
 		this.queue = queue;
 		this.host = host;
 		this.port = port;
+
+		System.out.println("RMQSpout started");
 	}
 
 	public byte[] receive() {
