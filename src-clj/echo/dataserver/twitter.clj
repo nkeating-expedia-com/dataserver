@@ -15,7 +15,9 @@
   (str "https://twitter.com/" name))
 
 (defthreadlocal date-parser 
-  (SimpleDateFormat. "E MMM d HH:mm:ss Z yyyy" (java.util.Locale. "en"))) ; "Mon Jun 04 19:04:12 +0000 2012"
+  (doto
+    (SimpleDateFormat. "E MMM d HH:mm:ss Z yyyy" (java.util.Locale. "en"))
+    (.setTimeZone (java.util.TimeZone/getTimeZone "GMT")))) ; "Mon Jun 04 19:04:12 +0000 2012"
 
 (defn parse-date [str]
   (.parse ^SimpleDateFormat (.get ^ThreadLocal date-parser) str))
