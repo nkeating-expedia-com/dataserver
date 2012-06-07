@@ -60,8 +60,8 @@ public class EchoSubmitBolt extends BaseRichBolt {
 		service.signRequest(token, request);
 
 		Response response = request.send();
-		System.out.println(response.getCode());
-		System.out.println(response.getBody());
+
+		System.out.println("http code " + response.getCode() + " " + response.getBody());
 	}
 
 	@Override

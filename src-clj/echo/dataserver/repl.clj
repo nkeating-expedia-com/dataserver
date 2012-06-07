@@ -2,7 +2,7 @@
   (:import
     [backtype.storm StormSubmitter LocalCluster Config]
     [echo.dataserver RMQSpout]
-    [echo.dataserver ECHOBolt])
+    [echo.dataserver EchoSubmitBolt])
   (:require
     [echo.dataserver.twitter :as twitter]
     [echo.dataserver.rules :as rules]
@@ -41,7 +41,7 @@
      "to-payload"        (bolt-spec {"apply-rules" :shuffle}   as/json->payload :p 6)
      "to-submit-queue"   (bolt-spec {"to-payload" :shuffle}    (rmq/poster {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*}) :p 6)
      "to-file"           (bolt-spec {"drink-submit" :shuffle}  (logger "log-submitted.txt") :p 6)
-     "to-submit-api"     (bolt-spec {"drink-submit" :shuffle}  (ECHOBolt.) :p 6)}))
+     "to-submit-api"     (bolt-spec {"drink-submit" :shuffle}  (EchoSubmitBolt.) :p 6)}))
 
 (defn run-local! []
   (let [cluster (LocalCluster.)]
