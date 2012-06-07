@@ -2,22 +2,23 @@ package echo.dataserver;
 
 import org.scribe.model.*;
 import org.scribe.builder.api.DefaultApi10a;
+import org.scribe.exceptions.OAuthException;
 
 
 public class EchoOAuthProvider extends DefaultApi10a {
 	@Override
 	public String getAccessTokenEndpoint() {
-		return null;
+		throw new OAuthException("Echo API only supports 2-legged OAuth calls");
 	}
 
 	@Override
 	public String getAuthorizationUrl(Token requestToken) {
-		return null;
+		throw new OAuthException("Echo API only supports 2-legged OAuth calls");
 	}
 
 	@Override
 	public String getRequestTokenEndpoint() {
-		return null;
+		throw new OAuthException("Echo API only supports 2-legged OAuth calls");
 	}
 
 }
