@@ -12,7 +12,7 @@
 
 (defbolt apply-rules ["item" "submit-tokens"] [tuple collector] 
   (let [item (read-string (.getString tuple 0))
-        item (merge-with concat item {:targets [:id "http://example.com/dataserver"]})
+        item (merge-with concat item {:targets [{:id "http://example.com/dataserver"}]})
         submit-tokens (merge {} default-tokens)]
     (emit-bolt! collector [(pr-str item) (pr-str submit-tokens)] :anchor tuple)
     (ack! collector tuple)))
