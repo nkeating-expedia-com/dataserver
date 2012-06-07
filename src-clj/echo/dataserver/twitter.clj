@@ -44,7 +44,7 @@
        :id        uri}
        (maybe-populate-reply tweet))))
 
-(defspout from-file ["tweet"] {:params [in out] :prepared true}
+(defspout from-file ["tweet"] {:params [in] :prepared true}
   [conf context collector]
   (let [rdr (atom (clojure.java.io/reader in))]
     (spout
@@ -57,8 +57,7 @@
               (reset! rdr nil)))
           (Thread/sleep 100)))
       (ack [id]
-        (log-message "ACKED: " id "\n")
-        (spit out (str "Processed " id "\n") :append true)))))
+        (log-message "ACKED: " id "\n")))))
 
 (defbolt tw-parse ["item"] [tuple collector]
   (let [tweet (json/read-json (.getString tuple 0))]
