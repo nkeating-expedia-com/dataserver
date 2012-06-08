@@ -24,7 +24,7 @@ import org.slf4j.MarkerFactory;
 
 
 public class RMQSpout extends BaseRichSpout {
-	private final Integer TIMEOUT = 100;
+	private final int TIMEOUT = 100;
 
 	private String queue;
 	private String host;

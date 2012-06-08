@@ -24,6 +24,10 @@ import org.slf4j.LoggerFactory;
 
 
 public class EchoSubmitBolt extends BaseRichBolt {
+	private final int OK = 0;
+	private final int ERR_WITH_RETRY = 1;
+	private final int ERR_WITH_LOG = 2;
+
 	private OutputCollector collector;
 
 	private final static Logger logger = LoggerFactory.getLogger(EchoSubmitBolt.class);
@@ -33,7 +37,35 @@ public class EchoSubmitBolt extends BaseRichBolt {
 		logger.debug("started");
 	}
 
-	private void submit(String key, String secret, String endpoint, String xml) {
+	private int responseAnalyze(int httpCode, String httpMsg) {
+		// OAuth 
+		if (httpCode == 401) {
+			JSONParser parser = new JSONParser();
+
+			try {
+				JSONObject data = (JSONObject)parser.parse(httpMsg);
+				String errorCode = (String)data.get("errorCode");
+
+				if (errorCode.equals("oauth_nonce_already_used")) return ERR_WITH_RETRY;
+				else return ERR_WITH_LOG;
+			} catch (org.json.simple.parser.ParseException e) {
+				logger.error("HTTP reply JSON parser exception in position:" + e.getPosition() + "\n" + httpMsg, e);
+			}
+		}
+
+		if (httpCode == 408 || httpCode == 429) return ERR_WITH_RETRY;
+		if (httpCode == 501) return ERR_WITH_LOG;
+
+		if (httpCode >= 200 && httpCode <= 299) return OK;
+		if (httpCode >= 400 && httpCode <= 499) return ERR_WITH_LOG;
+		if (httpCode >= 500 && httpCode <= 599) return ERR_WITH_RETRY;
+
+		return OK;
+	}
+
+	private boolean submit(String key, String secret, String endpoint, String xml) {
+		int result;
+
 		Token token = new Token("", "");
 		OAuthService service = new ServiceBuilder().apiKey(key).apiSecret(secret).provider(EchoOAuthProvider.class).build();
 
@@ -41,10 +73,22 @@ public class EchoSubmitBolt extends BaseRichBolt {
 		request.addBodyParameter("content", xml);
 
 		service.signRequest(token, request);
-
 		Response response = request.send();
 
-		logger.info("HTTP result code: " + response.getCode() + ", reply message: " + response.getBody());
+		result = responseAnalyze(response.getCode(), response.getBody());
+
+		if (result == OK) {
+			logger.debug("HTTP result code:" + response.getCode() + ", reply message:" + response.getBody());
+			return true;
+		} else if (result == ERR_WITH_RETRY) {
+			logger.info("HTTP result code:" + response.getCode() + ", reply message:" + response.getBody());
+			return false;
+		} else if (result == ERR_WITH_LOG) {
+			logger.error("HTTP result code:" + response.getCode() + ", reply message:" + response.getBody());
+			logger.error("Content data error:\nkey:" + key + "\nendpoint:" + endpoint + "\nxml:" + xml);
+		}
+
+		return true;
 	}
 
 	@Override
@@ -60,6 +104,8 @@ public class EchoSubmitBolt extends BaseRichBolt {
 		String secret;
 		String endpoint;
 
+		boolean result = true;
+
 		JSONParser parser = new JSONParser();
 
 		try {
@@ -71,11 +117,15 @@ public class EchoSubmitBolt extends BaseRichBolt {
 			secret = (String)oauth.get("secret");
 			endpoint = (String)oauth.get("endpoint");
 
-			submit(key, secret, endpoint, xml);
+			result = submit(key, secret, endpoint, xml);
 		} catch (org.json.simple.parser.ParseException e) {
-			logger.error("JSON parser exception in position: " + e.getPosition() + "\n" + new String((byte[])input.getValue(0)), e);
+			logger.error("JSON parser exception in position:" + e.getPosition() + "\n" + new String((byte[])input.getValue(0)), e);
 		} finally {
-			collector.ack(input);
+			if (result) {
+				collector.ack(input);
+			} else {
+				collector.fail(input);
+			}
 		}
 	}
 
