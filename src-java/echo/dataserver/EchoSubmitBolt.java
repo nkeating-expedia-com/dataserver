@@ -69,7 +69,7 @@ public class EchoSubmitBolt extends BaseRichBolt {
 		Token token = new Token("", "");
 		OAuthService service = new ServiceBuilder().apiKey(key).apiSecret(secret).provider(EchoOAuthProvider.class).build();
 
-		OAuthRequest request = new OAuthRequest(Verb.POST, endpoint + "v1/submit");
+		OAuthRequest request = new OAuthRequest(Verb.POST, endpoint);
 		request.addBodyParameter("content", xml);
 
 		service.signRequest(token, request);

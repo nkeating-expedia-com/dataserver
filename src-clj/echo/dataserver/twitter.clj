@@ -1,7 +1,8 @@
 (ns echo.dataserver.twitter
   (:use [backtype.storm clojure log]
         [echo.dataserver utils])
-  (:import [java.text SimpleDateFormat])
+  (:import [java.text SimpleDateFormat]
+           [backtype.storm.utils Utils])
   (:require [clojure.string :as str]
             [clojure.data.json :as json]
             [http.async.client :as httpc])
@@ -47,57 +48,64 @@
        :id        uri}
        (maybe-populate-reply tweet))))
 
-(defspout from-file ["tweet"] {:params [in] :prepared true}
-  [conf context collector]
-  (let [rdr (atom (clojure.java.io/reader in))]
-    (spout
-      (nextTuple []
-        (if @rdr
-          (if-let [l (binding [*in* @rdr] (read-line))]
-            (emit-spout! collector [l] :id (+ 100000 (rand-int 899999)))
-            (with-open [^java.io.BufferedReader _ @rdr]
-              (log-message "DONE READING\n")
-              (reset! rdr nil)))
-          (Thread/sleep 100)))
-      (ack [id]
-        (log-message "ACKED: " id "\n")))))
-
-(defbolt tw-parse ["item"] [tuple collector]
-  (let [tweet (json/read-json (.getString tuple 0))]
-    (when (tweet :text)
-      (emit-bolt! collector [(pr-str (tweet->item tweet))] :anchor tuple)))
-    (ack! collector tuple))
 
 (def tweets (ref []))
 (def listeners (atom {}))
 
+(defn read-stream [source-config callback]
+  (let [{:keys [login passwd endpoint params]} source-config
+        auth   {:type :basic :user login :password passwd :preemptive true}]
+    (with-open [client (httpc/create-client :request-timeout -1 :auth auth)]
+      (doseq [s (httpc/string (httpc/stream-seq client :post endpoint :body params))]
+        (if (= 0 (rand-int (get source-config :sieve 1)))
+          (callback s))))))
+
+(defn tweet->record [tweet source-config]
+  (let [tweet (json/read-json tweet)]
+    (if (:text tweet)
+      {:record-id (:id tweet)
+       :source    {:type "twitter", :name (:name source-config)}
+       :item      (tweet->item tweet)}
+      nil)))
+
 (defn on-tweet [content]
-  (log-message (str "Tweet received:" content))
+  (log-debug "Tweet DRINKED: " (subs content 0 100) "...")
   (if (not (str/blank? content))
     (dosync (alter tweets conj content))))
 
-(defn read-stream [endpoint-conf]
-  (let [{:keys [login passwd endpoint params]} endpoint-conf
-        auth   {:type :basic :user login :password passwd :preemptive true}
-        client (httpc/create-client :auth auth)
-        resp   (httpc/stream-seq client :post endpoint :body params)]
-    (doseq [s (httpc/string resp)]
-      (on-tweet s))))
-
-(defspout from-endpoint ["tweet"] {:params [name endpoint-conf] :prepared true}
+(defspout from-endpoint ["record"] {:params [source-config] :prepared true}
   [conf context collector]
+  (let [source-name (:name source-config)]
 
-  (let [t (Thread. #(read-stream endpoint-conf))]
-    (.start t)
-    (swap! listeners assoc name t))
+    (->> (Thread. #(read-stream source-config #'on-tweet))
+      (.start)
+      (swap! listeners assoc source-name))
 
-  (spout
-    (nextTuple []
-      (dosync
-        (if-let [t (first @tweets)]
-          (do
-            (emit-spout! collector [t] :id (+ 100000 (rand-int 899999)))
-            (alter tweets rest))
-          (Thread/sleep 100))))
-    (ack [id]
-      (log-message "ACKED: " id "\n"))))
+    (spout
+      (nextTuple []
+        (dosync
+          (if-let [t (first @tweets)]
+            (when-let [record (tweet->record t source-config)]
+              (emit-spout! collector [(pr-str record)] :id (:record-id record))
+              (alter tweets rest))
+            (Utils/sleep 100))))
+      (ack [id]
+        (log-message "Tweet ACKED: " id)))))
+
+
+(defspout from-file ["record"] {:params [source-config] :prepare true}
+  [conf context collector]
+  (let [file (:file source-config)
+        rdr  (atom (clojure.java.io/reader file))]
+    (spout
+      (nextTuple []
+        (if @rdr
+          (if-let [l (binding [*in* @rdr] (read-line))]
+            (when-let [record (tweet->record l source-config)]
+              (emit-spout! collector [(pr-str record)] :id (:record-id record)))
+            (with-open [^java.io.BufferedReader _ @rdr] ; closing @rdr
+              (log-message "DONE READING\n")
+              (reset! rdr nil)))
+          (Utils/sleep 100)))
+      (ack [id]
+        (log-message "Tweet ACKED: " id)))))

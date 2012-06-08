@@ -13,3 +13,5 @@ entry.xml
 log-*
 tweet.json
 twitter_jskithttp_sample.json
+*.config
+log

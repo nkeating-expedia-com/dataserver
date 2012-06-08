@@ -1,0 +1,24 @@
+{
+  :sources [
+    { :name     "jskit-twitter-sample"
+      :type     "twitter"
+      :login    "..." 
+      :passwd   "..."
+      :endpoint "https://stream.twitter.com/1/statuses/sample.json"
+      :params   nil}
+  ]
+
+  :rules [
+    { :name "jskit-dataserver-demo"
+      :conditions [
+        ; [:eq [:source :type] "twitter"]
+        [:eq [:source :name] "jskit-twitter-sample"]
+      ]
+      :actions [
+        [:conj-in  [:item :targets] {:id "http://example.com/dataserver"}]
+        [:assoc-in [:submit-tokens]  {:key      "..."
+                                      :secret   "..."
+                                      :endpoint "http://api.prokopov.ul.js-kit.com/v1/submit"}]
+      ]}
+  ]
+}

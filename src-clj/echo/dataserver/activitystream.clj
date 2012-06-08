@@ -89,9 +89,10 @@
       (xml/emit _feed))))
 
 (defbolt json->payload ["payload"] [tuple collector] 
-  (let [item  (read-string (.getString tuple 0))
-        _xml  (json->xml item)
-        submit-tokens (read-string (.getString tuple 1))
-        payload ^String (json/json-str {:xml _xml :submit-tokens submit-tokens})]
-    (emit-bolt! collector [(.getBytes payload)] :anchor tuple)
+  (let [record  (read-string (.getString tuple 0))
+        item    (:item record)
+        _xml    (json->xml item)
+        record  (-> record (dissoc :item) (assoc :xml _xml))
+        payload (-> record json/json-str (.getBytes))]
+    (emit-bolt! collector [payload] :anchor tuple)
     (ack! collector tuple)))

@@ -1,18 +1,34 @@
 (ns echo.dataserver.rules
   (:require [clojure.string :as str]
             [clojure.data.json :as json])
-  (:use     [backtype.storm clojure])
+  (:use     [backtype.storm clojure log])
   (:gen-class))
 (set! *warn-on-reflection* true)
 
-(def default-tokens
-  {"key" "test-1.js-kit.com"
-   "secret" "5eb609327578195a00f5f47a08a72ae9"
-   "endpoint" "http://api.prokopov.ul.js-kit.com/"})
+(def pass? (memoize 
+  (fn [conditions]
+    (fn [record]
+      true)))) ; TODO
 
-(defbolt apply-rules ["item" "submit-tokens"] [tuple collector] 
-  (let [item (read-string (.getString tuple 0))
-        item (merge-with concat item {:targets [{:id "http://example.com/dataserver"}]})
-        submit-tokens (merge {} default-tokens)]
-    (emit-bolt! collector [(pr-str item) (pr-str submit-tokens)] :anchor tuple)
-    (ack! collector tuple)))
+(def action-fns {
+  :conj-in  (fn [record path val] (update-in record path conj val))
+  :assoc-in (fn [record path val] (assoc-in record path val))
+  })
+
+(defn act [record action]
+  (let [[action & args] action
+        action-fn (action-fns action)]
+    (apply action-fn record args)))
+
+
+(defbolt apply-rules ["record"] {:params [rules]}
+  [tuple collector]
+  (let [record (read-string (.getString tuple 0))]
+    (log-debug "CHECKING RECORD: " (:record-id record)) 
+    (doseq [{:keys [name conditions actions]} rules]
+      (when ((pass? conditions) record)
+        (log-debug "RECORD PASSED: " (:record-id record)) 
+        (let [record (reduce act record actions)
+              record (assoc-in record [:rule :name] name)]
+          (emit-bolt! collector [(pr-str record)] :anchor tuple)))))
+  (ack! collector tuple))
