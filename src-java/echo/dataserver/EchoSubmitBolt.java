@@ -10,8 +10,6 @@ import org.scribe.model.Response;
 import org.scribe.model.Token;
 import org.scribe.model.Verb;
 import org.scribe.oauth.OAuthService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -21,15 +19,18 @@ import backtype.storm.topology.base.BaseRichBolt;
 import backtype.storm.tuple.Fields;
 import backtype.storm.tuple.Tuple;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 public class EchoSubmitBolt extends BaseRichBolt {
 	private OutputCollector collector;
 
-	private final static Logger logger = LoggerFactory.getLogger(RMQSpout.class);
+	private final static Logger logger = LoggerFactory.getLogger(EchoSubmitBolt.class);
 
 
 	public EchoSubmitBolt() {
-		logger.debug("EchoSubmitBolt started");
+		logger.debug("started");
 	}
 
 	private void submit(String key, String secret, String endpoint, String xml) {
@@ -43,7 +44,7 @@ public class EchoSubmitBolt extends BaseRichBolt {
 
 		Response response = request.send();
 
-		logger.info("EchoSubmitBolt - http code " + response.getCode() + " " + response.getBody());
+		logger.info("HTTP result code: " + response.getCode() + ", reply message: " + response.getBody());
 	}
 
 	@Override
@@ -72,7 +73,7 @@ public class EchoSubmitBolt extends BaseRichBolt {
 
 			submit(key, secret, endpoint, xml);
 		} catch (org.json.simple.parser.ParseException e) {
-			logger.error("EchoSubmitBolt - " + e.getMessage());
+			logger.error("JSON parser exception in position: " + e.getPosition() + "\n" + new String((byte[])input.getValue(0)), e);
 		} finally {
 			collector.ack(input);
 		}

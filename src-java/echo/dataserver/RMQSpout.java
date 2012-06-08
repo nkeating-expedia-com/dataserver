@@ -42,7 +42,7 @@ public class RMQSpout extends BaseRichSpout {
 		this.host = host;
 		this.port = port;
 
-		logger.debug("RMQSpout started");
+		logger.debug("started");
 	}
 
 	private byte[] receive() {
@@ -54,7 +54,8 @@ public class RMQSpout extends BaseRichSpout {
 			}
 		} catch (Exception e) {
 			Marker fatal = MarkerFactory.getMarker("FATAL");
-			logger.error(fatal, "RMQSpout - rmq receive() exception");
+			logger.error(fatal, "", e);
+
 			throw sneakyThrow(e);
 		}
 
@@ -79,7 +80,8 @@ public class RMQSpout extends BaseRichSpout {
 			channel.basicConsume(queue, true, queueConsumer);
 		} catch (Exception e) {
 			Marker fatal = MarkerFactory.getMarker("FATAL");
-			logger.debug(fatal, "RMQSpout - spout open() exception");
+			logger.error(fatal, "", e);
+
 			throw sneakyThrow(e);
 		}
 	}
