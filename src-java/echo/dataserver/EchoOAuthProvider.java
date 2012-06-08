@@ -20,5 +20,4 @@ public class EchoOAuthProvider extends DefaultApi10a {
 	public String getRequestTokenEndpoint() {
 		throw new OAuthException("Echo API only supports 2-legged OAuth calls");
 	}
-
 }

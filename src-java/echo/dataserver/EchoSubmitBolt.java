@@ -21,36 +21,14 @@ import backtype.storm.tuple.Tuple;
 
 
 public class EchoSubmitBolt extends BaseRichBolt {
-	private String xml;
-
-	private String key;
-	private String secret;
-	private String endpoint;
-
 	private OutputCollector collector;
 
 
 	public EchoSubmitBolt() {
-		System.out.println("ECHOBolt started");
+		System.out.println("EchoSubmitBolt started");
 	}
 
-	private void parseJSON(String json) {
-		JSONParser parser = new JSONParser();
-
-		try {
-			JSONObject data = (JSONObject)parser.parse(json);
-			JSONObject oauth = (JSONObject)data.get("submit-tokens");
-			
-			xml = (String)data.get("xml");
-			key = (String)oauth.get("key");
-			secret = (String)oauth.get("secret");
-			endpoint = (String)oauth.get("endpoint");
-		} catch (org.json.simple.parser.ParseException e) {
-			e.printStackTrace();
-		}
-	}
-
-	private void submit() {
+	private void submit(String key, String secret, String endpoint, String xml) {
 		Token token = new Token("", "");
 		OAuthService service = new ServiceBuilder().apiKey(key).apiSecret(secret).provider(EchoOAuthProvider.class).build();
 
@@ -61,7 +39,7 @@ public class EchoSubmitBolt extends BaseRichBolt {
 
 		Response response = request.send();
 
-		System.out.println("http code " + response.getCode() + " " + response.getBody());
+		System.out.println("EchoSubmitBolt - http code " + response.getCode() + " " + response.getBody());
 	}
 
 	@Override
@@ -71,10 +49,29 @@ public class EchoSubmitBolt extends BaseRichBolt {
 
 	@Override
 	public void execute(Tuple input) {
-		parseJSON(new String((byte[])input.getValue(0)));
-		submit();
+		String xml;
 
-		collector.ack(input);
+		String key;
+		String secret;
+		String endpoint;
+
+		JSONParser parser = new JSONParser();
+
+		try {
+			JSONObject data = (JSONObject)parser.parse(new String((byte[])input.getValue(0)));
+			JSONObject oauth = (JSONObject)data.get("submit-tokens");
+
+			xml = (String)data.get("xml");
+			key = (String)oauth.get("key");
+			secret = (String)oauth.get("secret");
+			endpoint = (String)oauth.get("endpoint");
+
+			submit(key, secret, endpoint, xml);
+		} catch (org.json.simple.parser.ParseException e) {
+			e.printStackTrace();
+		} finally {
+			collector.ack(input);
+		}
 	}
 
 	@Override

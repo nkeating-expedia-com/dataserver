@@ -15,6 +15,8 @@ import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.QueueingConsumer;
 
+import static clojure.lang.Util.sneakyThrow;
+
 
 public class RMQSpout extends BaseRichSpout {
 	private final Integer TIMEOUT = 100;
@@ -45,8 +47,8 @@ public class RMQSpout extends BaseRichSpout {
 			}
 		} catch (Exception e) {
 			//collector.reportError(e);
-			System.out.println("RMQSpout exception 1");
-			new RuntimeException(e);
+			System.out.println("RMQSpout - rmq receive() exception");
+			throw sneakyThrow(e);
 		}
 
 		return null;
@@ -70,8 +72,8 @@ public class RMQSpout extends BaseRichSpout {
 			channel.basicConsume(queue, true, queueConsumer);
 		} catch (Exception e) {
 			//collector.reportError(e);
-			System.out.println("RMQSpout exception 2");
-			new RuntimeException(e);
+			System.out.println("RMQSpout - spout open() exception");
+			throw sneakyThrow(e);
 		}
 	}
 
