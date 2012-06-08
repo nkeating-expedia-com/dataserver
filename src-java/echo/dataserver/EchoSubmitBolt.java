@@ -10,6 +10,8 @@ import org.scribe.model.Response;
 import org.scribe.model.Token;
 import org.scribe.model.Verb;
 import org.scribe.oauth.OAuthService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import backtype.storm.task.OutputCollector;
 import backtype.storm.task.TopologyContext;
@@ -23,23 +25,25 @@ import backtype.storm.tuple.Tuple;
 public class EchoSubmitBolt extends BaseRichBolt {
 	private OutputCollector collector;
 
+	private final static Logger logger = LoggerFactory.getLogger(RMQSpout.class);
+
 
 	public EchoSubmitBolt() {
-		System.out.println("EchoSubmitBolt started");
+		logger.debug("EchoSubmitBolt started");
 	}
 
 	private void submit(String key, String secret, String endpoint, String xml) {
 		Token token = new Token("", "");
 		OAuthService service = new ServiceBuilder().apiKey(key).apiSecret(secret).provider(EchoOAuthProvider.class).build();
 
-		OAuthRequest request = new OAuthRequest(Verb.POST, endpoint + "v1/submit");
+		OAuthRequest request = new OAuthRequest(Verb.POST, endpoint);
 		request.addBodyParameter("content", xml);
 
 		service.signRequest(token, request);
 
 		Response response = request.send();
 
-		System.out.println("EchoSubmitBolt - http code " + response.getCode() + " " + response.getBody());
+		logger.info("EchoSubmitBolt - http code " + response.getCode() + " " + response.getBody());
 	}
 
 	@Override
@@ -68,7 +72,7 @@ public class EchoSubmitBolt extends BaseRichBolt {
 
 			submit(key, secret, endpoint, xml);
 		} catch (org.json.simple.parser.ParseException e) {
-			e.printStackTrace();
+			logger.error("EchoSubmitBolt - " + e.getMessage());
 		} finally {
 			collector.ack(input);
 		}

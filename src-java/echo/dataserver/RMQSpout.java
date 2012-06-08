@@ -17,6 +17,11 @@ import com.rabbitmq.client.QueueingConsumer;
 
 import static clojure.lang.Util.sneakyThrow;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.Marker;
+import org.slf4j.MarkerFactory;
+
 
 public class RMQSpout extends BaseRichSpout {
 	private final Integer TIMEOUT = 100;
@@ -29,13 +34,15 @@ public class RMQSpout extends BaseRichSpout {
 
 	private transient QueueingConsumer queueConsumer;
 
+	private final static Logger logger = LoggerFactory.getLogger(RMQSpout.class);
+
 
 	public RMQSpout(String queue, String host, Integer port) {
 		this.queue = queue;
 		this.host = host;
 		this.port = port;
 
-		System.out.println("RMQSpout started");
+		logger.debug("RMQSpout started");
 	}
 
 	private byte[] receive() {
@@ -46,8 +53,8 @@ public class RMQSpout extends BaseRichSpout {
 				return delivery.getBody();
 			}
 		} catch (Exception e) {
-			//collector.reportError(e);
-			System.out.println("RMQSpout - rmq receive() exception");
+			Marker fatal = MarkerFactory.getMarker("FATAL");
+			logger.error(fatal, "RMQSpout - rmq receive() exception");
 			throw sneakyThrow(e);
 		}
 
@@ -71,8 +78,8 @@ public class RMQSpout extends BaseRichSpout {
 			queueConsumer = new QueueingConsumer(channel);
 			channel.basicConsume(queue, true, queueConsumer);
 		} catch (Exception e) {
-			//collector.reportError(e);
-			System.out.println("RMQSpout - spout open() exception");
+			Marker fatal = MarkerFactory.getMarker("FATAL");
+			logger.debug(fatal, "RMQSpout - spout open() exception");
 			throw sneakyThrow(e);
 		}
 	}
