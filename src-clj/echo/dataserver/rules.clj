@@ -5,29 +5,21 @@
   (:gen-class))
 (set! *warn-on-reflection* true)
 
-(def pass? (memoize 
-  (fn [conditions]
-    (fn [record]
-      true)))) ; TODO
+(def compile-expr (memoize 
+  (fn [expr] (eval expr))))
 
-(def action-fns {
-  :conj-in  (fn [record path val] (update-in record path conj val))
-  :assoc-in (fn [record path val] (assoc-in record path val))
-  })
+(defn check [r c]
+  ((compile-expr c) r))
 
-(defn act [record action]
-  (let [[action & args] action
-        action-fn (action-fns action)]
-    (apply action-fn record args)))
+(defn act [r a]
+  ((compile-expr a) r))
 
-
-(defbolt apply-rules ["record"] {:params [rules]}
-  [tuple collector]
+(defbolt apply-rules ["record"] {:params [rules]} [tuple collector]
   (let [record (read-string (.getString tuple 0))]
     (log-debug "CHECKING RECORD: " (:record-id record)) 
-    (doseq [{:keys [name conditions actions]} rules]
-      (when ((pass? conditions) record)
-        (log-debug "RECORD PASSED: " (:record-id record)) 
+    (doseq [{:keys [name condition actions]} rules]
+      (when (check record condition)
+        (log-debug "RECORD PASSED for '" name "': " (:record-id record) " (" (get-in record [:source :name])  ")") 
         (let [record (reduce act record actions)
               record (assoc-in record [:rule :name] name)]
           (emit-bolt! collector [(pr-str record)] :anchor tuple)))))

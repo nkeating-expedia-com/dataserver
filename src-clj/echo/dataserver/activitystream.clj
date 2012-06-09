@@ -1,7 +1,8 @@
 (ns echo.dataserver.activitystream
   (:require [clojure.string :as str]
             [clojure.data.json :as json]
-            [echo.dataserver.xml :as xml])
+            [echo.dataserver.xml :as xml]
+            [echo.dataserver.config :as config])
   (:use     [backtype.storm clojure]
              echo.dataserver.utils)
   (:import  [java.text SimpleDateFormat])
@@ -16,13 +17,11 @@
 (defn format-date [^java.util.Date date]
   (.format ^SimpleDateFormat (.get ^ThreadLocal date-formatter) date))
 
-(def namespaces
-  {"activity" "http://activitystrea.ms/spec/1.0/"
-   "thr" "http://purl.org/syndication/thread/1.0"
-   "media" "http://purl.org/syndication/atommedia"})
-
 (def default-object
-  {:object-type "http://activitystrea.ms/schema/1.0/note"})
+  {:object-type "http://activitystrea.ms/schema/1.0/note"
+   :source {:name "DataServer fake source"
+            :icon "http://cdn.js-kit.com/images/echo.png"
+            :uri  "http://aboutecho.com/"}})
 (def default-actor 
   {:object-type "http://activitystrea.ms/schema/1.0/person"})
 (def default-entry 
@@ -30,13 +29,21 @@
 
 (defn target [t]
   [:target {:ns :activity}
-    [:id (:id t)]])
+    [:id (:url t)]])
 
-(defn entry [item]
-  (let [{:keys [object actor targets]} item
+(defn entry [record]
+  (let [item   (:item record)
+        {:keys [object actor targets source]} item
         object (merge default-object object)
         actor  (merge default-actor  actor)
-        entry  (merge default-entry {:object object, :actor actor, :targets targets})]
+        entry  (merge default-entry {:object object, :actor actor, :targets targets, :source source})
+        content (get-in entry [:object :content])
+        content (if config/*debug* 
+                  (str "source: " (get-in record [:source :name]) "\n"
+                       "rule: "   (get-in record [:rule :name])   "\n"
+                       "user: "   (get-in item   [:actor :name])  "\n\n"
+                       content) 
+                  content)]
     (concat
       [:entry
         [:published (format-date (or (:published entry) (now)))]
@@ -44,21 +51,21 @@
         [:verb {:ns :activity} (:verb entry)]
         [:source 
           [:provider {:ns "service"}
-            [:name "Twitter"]
-            [:uri (get-in entry [:object :id])]
-            [:icon "http://cdn.js-kit.com/images/favicons/twitter.png"]]]
+            [:name (get-in entry [:source :name])]
+            [:uri  (get-in entry [:source :url])]
+            [:icon (get-in entry [:source :icon])]]]
         [:object {:ns :activity}
           [:object-type {:ns :activity} (get-in entry [:object :object-type])]
-          [:id          {:ns :activity} (get-in entry [:object :id])]
-          [:content     {"type" "html"} (get-in entry [:object :content])]
-          [:link        {"rel" "alternate" "type" "text/html" "href" (get-in entry [:object :id])}]
+          [:id          {:ns :activity} (get-in entry [:object :url])]
+          [:content     {"type" "html"} content]
+          [:link        {"rel" "alternate" "type" "text/html" "href" (get-in entry [:object :url])}]
           [:source      {"type" "html"} (get-in entry [:object :source])]]
         [:actor {:ns :activity}
           [:object-type {:ns :activity} (get-in entry [:actor :object-type])]
-          [:id          (get-in entry [:actor :id])]
-          [:title       (get-in entry [:actor :title])]
+          [:id          (get-in entry [:actor :url])]
+          [:title       (get-in entry [:actor :displayName])]
           [:link {"rel" "avatar"    "type" "image/jpeg" "href" (get-in entry [:actor :avatar])}]
-          [:link {"rel" "alternate" "type" "text/html"  "href" (get-in entry [:actor :id])}]
+          [:link {"rel" "alternate" "type" "text/html"  "href" (get-in entry [:actor :url])}]
         ]]
       (mapv target (:targets entry)))
     ))
@@ -72,8 +79,6 @@
               "xmlns:thr"      "http://purl.org/syndication/thread/1.0"
               "xmlns:media"    "http://purl.org/syndication/atommedia"
               "xmlns:service"  "http://activitystrea.ms/service-provider"}
-        [:id "tag:twitter.com,2007:Status"]
-        [:title {"type" "text"} "Twitter status updates"]
         [:updated (format-date (now))]
         [:generator {"uri" "http://aboutecho.com/"} "DataServer (c) JackNyfe, 2012"]
         [:provider {:ns "service"}
@@ -82,17 +87,16 @@
           [:icon "http://cdn.js-kit.com/images/echo.png"]]]
       entries)])
 
-(defn json->xml [item]
-  (let [_entries [(entry item)]
+(defn json->xml [record]
+  (let [_entries [(entry record)]
         _feed    (feed _entries)]
     (with-out-str
       (xml/emit _feed))))
 
 (defbolt json->payload ["payload"] [tuple collector] 
   (let [record  (read-string (.getString tuple 0))
-        item    (:item record)
-        _xml    (json->xml item)
+        _xml    (json->xml record)
         record  (-> record (dissoc :item) (assoc :xml _xml))
-        payload (-> record json/json-str (.getBytes))]
-    (emit-bolt! collector [payload] :anchor tuple)
+        payload ^String (json/json-str record)]
+    (emit-bolt! collector [(.getBytes payload)] :anchor tuple)
     (ack! collector tuple)))

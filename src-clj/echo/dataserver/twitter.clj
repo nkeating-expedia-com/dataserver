@@ -9,10 +9,10 @@
   (:gen-class))
 (set! *warn-on-reflection* true)
 
-(defn uri-of-tweet [name id]
+(defn url-of-tweet [name id]
   (str "https://twitter.com/" name "/status/" id))
 
-(defn uri-of-twitterer [name]
+(defn url-of-twitterer [name]
   (str "https://twitter.com/" name))
 
 (defthreadlocal date-parser 
@@ -28,37 +28,43 @@
     (if in_reply_to_status_id
       (merge-with concat item
         {:targets [
-          {:id (uri-of-tweet in_reply_to_screen_name in_reply_to_status_id)}]})
+          {:url (url-of-tweet in_reply_to_screen_name in_reply_to_status_id)
+           :id  in_reply_to_status_id}]})
       item)))
 
 (defn tweet->item [tweet]
-  (let [{:keys [text id  user created_at source] :or {source "web"}}  tweet
+  (let [{:keys [text id user created_at source] :or {source "web"}}  tweet
         {:keys [name screen_name profile_image_url]}  user
         published (parse-date created_at)
-        uri (uri-of-tweet screen_name id)]
+        url (url-of-tweet screen_name id)]
     (->
       {:object {:content text
-                :id uri
+                :url url
                 :source source}
-       :actor  {:id (uri-of-twitterer screen_name)
-                :title name
+       :actor  {:id  (:id user) 
+                :url (url-of-twitterer screen_name)
+                :name screen_name
+                :displayName name
                 :avatar profile_image_url}
+       :source  {:name "Twitter"
+                 :icon "http://cdn.js-kit.com/images/favicons/twitter.png"
+                 :url  url}
        :published published
        :updated   published
-       :id        uri}
+       :id        url}
        (maybe-populate-reply tweet))))
 
-
-(def tweets (ref []))
-(def listeners (atom {}))
 
 (defn read-stream [source-config callback]
   (let [{:keys [login passwd endpoint params]} source-config
         auth   {:type :basic :user login :password passwd :preemptive true}]
     (with-open [client (httpc/create-client :request-timeout -1 :auth auth)]
-      (doseq [s (httpc/string (httpc/stream-seq client :post endpoint :body params))]
-        (if (= 0 (rand-int (get source-config :sieve 1)))
-          (callback s))))))
+      (doseq [content (httpc/string (httpc/stream-seq client :post endpoint :body params))]
+        (when (and (not (str/blank? content))
+                   (= 0 (rand-int (get source-config :sieve 1))))
+          (log-debug "Tweet DRINKED: " (str-head content 100) "...")
+          (spit "log/tweets.log" content :append true)
+          (callback content))))))
 
 (defn tweet->record [tweet source-config]
   (let [tweet (json/read-json tweet)]
@@ -68,26 +74,25 @@
        :item      (tweet->item tweet)}
       nil)))
 
-(defn on-tweet [content]
-  (log-debug "Tweet DRINKED: " (subs content 0 100) "...")
-  (if (not (str/blank? content))
-    (dosync (alter tweets conj content))))
+(def reader-threads (atom {}))
 
 (defspout from-endpoint ["record"] {:params [source-config] :prepared true}
   [conf context collector]
-  (let [source-name (:name source-config)]
+  (let [source-name (:name source-config)
+        queue       (ref [])
+        queue-put   (fn [t] (dosync (alter queue conj t)))]
 
-    (->> (Thread. #(read-stream source-config #'on-tweet))
+    (->> (Thread. #(read-stream source-config queue-put))
       (.start)
-      (swap! listeners assoc source-name))
+      (swap! reader-threads assoc source-name))
 
     (spout
       (nextTuple []
         (dosync
-          (if-let [t (first @tweets)]
+          (if-let [t (first @queue)]
             (when-let [record (tweet->record t source-config)]
               (emit-spout! collector [(pr-str record)] :id (:record-id record))
-              (alter tweets rest))
+              (alter queue rest))
             (Utils/sleep 100))))
       (ack [id]
         (log-message "Tweet ACKED: " id)))))

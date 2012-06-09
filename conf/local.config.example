@@ -1,24 +1,48 @@
 {
   :sources [
-    { :name     "jskit-twitter-sample"
+    { :name     "jskit-twitter-filter"
       :type     "twitter"
       :login    "..." 
       :passwd   "..."
-      :endpoint "https://stream.twitter.com/1/statuses/sample.json"
-      :params   nil}
+      :endpoint "https://stream.twitter.com/1/statuses/filter.json"
+      :params   {"follow" "24621955,14230524,27260086"}
+      :sieve    20}
+
+    { :name     "jskit-twitter-track"
+      :type     "twitter"
+      :login    "..." 
+      :passwd   "..."
+      :endpoint "https://stream.twitter.com/1/statuses/filter.json"
+      :params   {"track" "apple,iphone"}
+      :sieve    50}
+
+    { :name     "jskit-twitter-file"
+      :type     "twitter-file"
+      :file     "tweets.json"}
   ]
 
   :rules [
-    { :name "jskit-dataserver-demo"
-      :conditions [
-        ; [:eq [:source :type] "twitter"]
-        [:eq [:source :name] "jskit-twitter-sample"]
-      ]
+    { :name "jskit-demo"
+      :condition (fn [r]
+        (and
+          (= (get-in r [:source :type]) "twitter")
+          (= "jskit-twitter-filter" (get-in r [:source :name]))))
       :actions [
-        [:conj-in  [:item :targets] {:id "http://example.com/dataserver"}]
-        [:assoc-in [:submit-tokens]  {:key      "..."
-                                      :secret   "..."
-                                      :endpoint "http://api.prokopov.ul.js-kit.com/v1/submit"}]
+        (fn [r] (update-in r [:item :targets] conj {:url "http://example.com/dataserver/1"}))
+        (fn [r] (assoc-in  r [:submit-tokens] {:key      "..."
+                                               :secret   "..."
+                                               :endpoint "http://api.echoenabled.com/v1/submit"}))
+      ]}
+
+
+    { :name "jskit-demo-2"
+      :condition
+        (fn [r] (= "jskit-twitter-track" (get-in r [:source :name])))
+      :actions [
+        (fn [r] (update-in r [:item :targets] conj {:url "http://example.com/dataserver/2"}))
+        (fn [r] (assoc-in  r [:submit-tokens] {:key      "..."
+                                               :secret   "..."
+                                               :endpoint "http://api.echoenabled.com/v1/submit"}))
       ]}
   ]
 }

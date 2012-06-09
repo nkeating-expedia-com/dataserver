@@ -15,3 +15,6 @@
 
 (defn mapmap [f m]
   (into {} (mapv (fn [[k v]] (f k v)) m)))
+
+(defn str-head [s n]
+  (subs s 0 (min n (count s))))
