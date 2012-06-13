@@ -9,10 +9,10 @@
   (:gen-class))
 (set! *warn-on-reflection* true)
 
-(defn url-of-tweet [name id]
+(defn tweet-url [name id]
   (str "https://twitter.com/" name "/status/" id))
 
-(defn url-of-twitterer [name]
+(defn user-url [name]
   (str "https://twitter.com/" name))
 
 (defthreadlocal date-parser 
@@ -24,25 +24,24 @@
   (.parse ^SimpleDateFormat (.get ^ThreadLocal date-parser) str))
 
 (defn maybe-populate-reply [item tweet]
-  (let [{:keys [in_reply_to_screen_name in_reply_to_status_id]} tweet]
-    (if in_reply_to_status_id
-      (merge-with concat item
-        {:targets [
-          {:url (url-of-tweet in_reply_to_screen_name in_reply_to_status_id)
-           :id  in_reply_to_status_id}]})
+  (let [{parent-user :in_reply_to_screen_name parent-id :in_reply_to_status_id} tweet]
+    (if parent-id
+      (update-in item [:targets] conj {:url (tweet-url parent-user parent-id)
+                                       :id  parent-id})
       item)))
 
 (defn tweet->item [tweet]
-  (let [{:keys [text id user created_at source] :or {source "web"}}  tweet
+  (let [{:keys [text id user created_at source] :or {source "web"}} tweet
         {:keys [name screen_name profile_image_url]}  user
         published (parse-date created_at)
-        url (url-of-tweet screen_name id)]
+        url (tweet-url screen_name id)]
     (->
       {:object {:content text
                 :url url
+                :id  id
                 :source source}
        :actor  {:id  (:id user) 
-                :url (url-of-twitterer screen_name)
+                :url (user-url screen_name)
                 :name screen_name
                 :displayName name
                 :avatar profile_image_url}
@@ -50,10 +49,22 @@
                  :icon "http://cdn.js-kit.com/images/favicons/twitter.png"
                  :url  url}
        :published published
-       :updated   published
-       :id        url}
+       :updated   published}
        (maybe-populate-reply tweet))))
 
+(defn tweet->items [tweet]
+  (if (not (:text tweet))
+    []
+    (if-let [source-tweet (:retweeted_status tweet)]
+      (let  [source-item  (tweet->item source-tweet)
+             {{source-user :name} :actor 
+              {source-id :id 
+               source-url :url}   :object} source-item 
+             item (-> (tweet->item tweet)
+                      (assoc-in [:targets] [{:id  source-id
+                      :url source-url}]))]
+        [source-item item])
+      [(tweet->item tweet)])))
 
 (defn read-stream [source-config callback]
   (let [{:keys [login passwd endpoint params]} source-config
@@ -66,13 +77,12 @@
           (spit "log/tweets.log" content :append true)
           (callback content))))))
 
-(defn tweet->record [tweet source-config]
+(defn tweet->records [tweet source-config]
   (let [tweet (json/read-json tweet)]
-    (if (:text tweet)
-      {:record-id (:id tweet)
+    (for [item (tweet->items tweet)]
+      {:record-id (get-in item [:object :id])
        :source    {:type "twitter", :name (:name source-config)}
-       :item      (tweet->item tweet)}
-      nil)))
+       :item      item})))
 
 (def reader-threads (atom {}))
 
@@ -88,12 +98,12 @@
 
     (spout
       (nextTuple []
-        (dosync
-          (if-let [t (first @queue)]
-            (when-let [record (tweet->record t source-config)]
+        (if-let [t (first @queue)]
+          (dosync
+            (doseq [record (tweet->records t source-config)]
               (emit-spout! collector [(pr-str record)] :id (:record-id record))
-              (alter queue rest))
-            (Utils/sleep 100))))
+              (alter queue rest)))
+          (Utils/sleep 100)))
       (ack [id]
         (log-message "Tweet ACKED: " id)))))
 
@@ -106,7 +116,7 @@
       (nextTuple []
         (if @rdr
           (if-let [l (binding [*in* @rdr] (read-line))]
-            (when-let [record (tweet->record l source-config)]
+            (doseq [record (tweet->records l source-config)]
               (emit-spout! collector [(pr-str record)] :id (:record-id record)))
             (with-open [^java.io.BufferedReader _ @rdr] ; closing @rdr
               (log-message "DONE READING\n")

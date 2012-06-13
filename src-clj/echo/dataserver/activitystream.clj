@@ -18,14 +18,14 @@
   (.format ^SimpleDateFormat (.get ^ThreadLocal date-formatter) date))
 
 (def default-object
-  {:object-type "http://activitystrea.ms/schema/1.0/note"
-   :source {:name "DataServer fake source"
+  {:object-type "note"
+   :source {:name "DataServer source"
             :icon "http://cdn.js-kit.com/images/echo.png"
             :uri  "http://aboutecho.com/"}})
 (def default-actor 
-  {:object-type "http://activitystrea.ms/schema/1.0/person"})
+  {:object-type "person"})
 (def default-entry 
-  {:verb "http://activitystrea.ms/schema/1.0/post"})
+  {:verb "post"})
 
 (defn target [t]
   [:target {:ns :activity}
