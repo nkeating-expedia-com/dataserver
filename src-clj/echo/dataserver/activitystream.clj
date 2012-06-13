@@ -97,6 +97,6 @@
   (let [record  (read-string (.getString tuple 0))
         _xml    (json->xml record)
         record  (-> record (dissoc :item) (assoc :xml _xml))
-        payload ^String (json/json-str record)]
-    (emit-bolt! collector [(.getBytes payload)] :anchor tuple)
+        payload (json/json-str record)]
+    (emit-bolt! collector [payload] :anchor tuple)
     (ack! collector tuple)))

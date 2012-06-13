@@ -1,7 +1,7 @@
 (ns echo.dataserver.repl
   (:import
     [backtype.storm StormSubmitter LocalCluster Config]
-    [echo.dataserver RMQSpout EchoSubmitBolt])
+    [echo.dataserver EchoSubmitBolt])
 
   (:require
     [echo.dataserver.twitter :as twitter]
@@ -20,13 +20,12 @@
 
 (def ^:dynamic *rmq-host* "prokopov.ul.js-kit.com")
 (def ^:dynamic *rmq-port* (int 5672))
+(def ^:dynamic *rmq-items-queue*  "dataserver.items")
 (def ^:dynamic *rmq-submit-queue* "dataserver.submit")
 
 (defbolt logger [] {:params [out]} [tuple collector] 
-  (let [payload (.getBinary tuple 0)]
-    (with-open [o (clojure.java.io/output-stream out :append true)]
-      (.write o payload)
-      (.write o (.getBytes "\n")))
+  (let [payload (.getString tuple 0)]
+    (spit out payload :append true)
     (ack! collector tuple)))
 
 (def type->spout-fn {
@@ -34,41 +33,55 @@
   "twitter-file" #'twitter/from-file
   })
 
-(defn source->spout [source]
-  (let [name     (str "drink/" (:type source) "/" (:name source))
-        spout-fn (type->spout-fn (:type source))
-        spec     (spout-spec (spout-fn source) :p (get source :p 1))] 
-    [name spec]))
+(defn top-drinker [source]
+  (let [p          (get source :p 1)
+        prefix     (str "drink/" (:type source) "/" (:name source))
+        spout-name (str prefix "/in")
+        spout-fn   (type->spout-fn (:type source))
+        spout      (spout-spec (spout-fn source) :p p)
+        out-name   (str prefix "/out")
+        out-bolt   (rmq/poster {:host *rmq-host* :port *rmq-port* :queue *rmq-items-queue*})
+        out        (bolt-spec {spout-name :shuffle} out-bolt :p p)]
+    (log-message "Starting " prefix " TOPOLOGY")
+    (topology 
+      {spout-name spout} 
+      {out-name   out})))
 
-(defn top-pipeline [env]
-  (let [config       (config/load-config (str "conf/" env ".config"))
-        {:keys [sources rules]} config
-        drinkers     (into {} (map source->spout sources))
-        drinkers-out (into {} (map (fn [n] [n :shuffle]) (keys drinkers)))
-        rmq-poster   (rmq/poster {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*})
+(defn top-pipeline [config]
+  (log-message "Starting PIPELINE TOPOLOGY")
+  (let [rules    (:rules config)
+        spout    (spout-spec (rmq/reader {:host *rmq-host* :port *rmq-port* :queue *rmq-items-queue*}))
+        out-bolt (rmq/poster {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*})
         pipeline {
           "pipeline/apply-rules"     
-            (bolt-spec drinkers-out (rules/apply-rules rules) :p 6)
+            (bolt-spec {"pipeline/in" :shuffle} (rules/apply-rules rules) :p 6)
           "pipeline/to-payload"      
             (bolt-spec {"pipeline/apply-rules" :shuffle} as/json->payload :p 6)
-          "pipeline/to-submit-queue" 
-            (bolt-spec {"pipeline/to-payload" :shuffle} rmq-poster :p 6)
+          "pipeline/out" 
+            (bolt-spec {"pipeline/to-payload" :shuffle} out-bolt :p 6)
         }]
-    (log-message "Starting PIPELINE TOPOLOGY")
-    (topology drinkers pipeline)))
+    (topology
+      {"pipeline/in" spout}
+      pipeline)))
 
-(defn top-submit []
+(defn top-submit [config]
   (log-message "Starting SUBMIT TOPOLOGY")
   (topology
-    {"submit/drink"   (spout-spec (RMQSpout. *rmq-submit-queue* *rmq-host* *rmq-port*))}
-    {"submit/to-echo" (bolt-spec {"submit/drink" :shuffle} (EchoSubmitBolt.) :p 6)
-     "submit/to-file" (bolt-spec {"submit/drink" :shuffle} (logger "log/submitted.log") :p 6)}))
+    {"submit/in"       (spout-spec (rmq/reader {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*}))}
+    {"submit/out-echo" (bolt-spec {"submit/in" :shuffle} (EchoSubmitBolt.) :p 6)
+     "submit/out-file" (bolt-spec {"submit/in" :shuffle} (logger "log/submitted.log") :p 6)}))
 
 (defn run-local! []
-  (let [cluster (LocalCluster.)
-        args    {TOPOLOGY-DEBUG false}]
-    (.submitTopology cluster "ds-submit"   args (top-submit))
-    (.submitTopology cluster "ds-pipeline" args (top-pipeline "local"))))
+  (let [env     "local"
+        cluster (LocalCluster.)
+        args    {TOPOLOGY-DEBUG false}
+        config  (config/load-config (str "conf/" env ".config"))]
+    (doseq [source (:sources config)
+            :let [name (str "ds-drink---" (:type source) "---" (:name source))]]
+      (.submitTopology cluster name        args (top-drinker source)))
+    (.submitTopology cluster "ds-submit"   args (top-submit config))
+    (.submitTopology cluster "ds-pipeline" args (top-pipeline config))
+))
 
 (defn -main
   ([] (run-local!))

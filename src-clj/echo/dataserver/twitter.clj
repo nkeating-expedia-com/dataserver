@@ -24,11 +24,19 @@
   (.parse ^SimpleDateFormat (.get ^ThreadLocal date-parser) str))
 
 (defn maybe-populate-reply [item tweet]
-  (let [{parent-user :in_reply_to_screen_name parent-id :in_reply_to_status_id} tweet]
+  (let [{parent-user :in_reply_to_screen_name
+         parent-id   :in_reply_to_status_id  } tweet]
     (if parent-id
       (update-in item [:targets] conj {:url (tweet-url parent-user parent-id)
                                        :id  parent-id})
       item)))
+
+(defn tweet-content [tweet]
+  (if-let [source-tweet (:retweeted_status tweet)]
+    (let [{{author :screen_name} :user
+           text                  :text} source-tweet]
+      (str "RT @" author ": " text))
+  (:text tweet)))
 
 (defn tweet->item [tweet]
   (let [{:keys [text id user created_at source] :or {source "web"}} tweet
@@ -36,7 +44,7 @@
         published (parse-date created_at)
         url (tweet-url screen_name id)]
     (->
-      {:object {:content text
+      {:object {:content (tweet-content tweet)
                 :url url
                 :id  id
                 :source source}
@@ -55,16 +63,17 @@
 (defn tweet->items [tweet]
   (if (not (:text tweet))
     []
-    (if-let [source-tweet (:retweeted_status tweet)]
-      (let  [source-item  (tweet->item source-tweet)
-             {{source-user :name} :actor 
-              {source-id :id 
-               source-url :url}   :object} source-item 
-             item (-> (tweet->item tweet)
-                      (assoc-in [:targets] [{:id  source-id
-                      :url source-url}]))]
-        [source-item item])
-      [(tweet->item tweet)])))
+    [(tweet->item tweet)]))
+
+;     (if-let [source-tweet (:retweeted_status tweet)]
+;       (let  [source-item  (tweet->item source-tweet)
+;              {{source-user :name} :actor 
+;               {source-id :id 
+;                source-url :url}   :object} source-item 
+;              item (-> (tweet->item tweet)
+;                       (assoc-in [:targets] [{:id  source-id
+;                       :url source-url}]))]
+;         [source-item item])
 
 (defn read-stream [source-config callback]
   (let [{:keys [login passwd endpoint params]} source-config

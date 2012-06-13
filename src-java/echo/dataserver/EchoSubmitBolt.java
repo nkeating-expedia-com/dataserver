@@ -109,7 +109,7 @@ public class EchoSubmitBolt extends BaseRichBolt {
 		JSONParser parser = new JSONParser();
 
 		try {
-			JSONObject data = (JSONObject)parser.parse(new String((byte[])input.getValue(0)));
+			JSONObject data = (JSONObject)parser.parse(input.getString(0));
 			JSONObject oauth = (JSONObject)data.get("submit-tokens");
 
 			xml = (String)data.get("xml");

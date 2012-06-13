@@ -91,7 +91,7 @@ public class RMQSpout extends BaseRichSpout {
 		byte[] data = receive();
 
 		if (data != null) {
-			collector.emit(new Values(data));
+			collector.emit(new Values(new String(data)));
 		}
 	}
 
