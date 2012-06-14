@@ -1,6 +1,7 @@
 (ns echo.dataserver.repl
   (:import
     [backtype.storm StormSubmitter LocalCluster Config]
+    [backtype.storm.generated TopologySummary Nimbus$Client KillOptions]
     [echo.dataserver EchoSubmitBolt])
 
   (:require
@@ -10,10 +11,11 @@
     [echo.dataserver.rmq :as rmq]
     [echo.dataserver.config :as config]
     [clojure.string :as str]
+    [clojure.set :as set]
     [clojure.data.json :as json]
     [clojure.data.xml :as xml])
   (:use
-    [backtype.storm clojure config log]
+    [backtype.storm clojure config log thrift]
     echo.dataserver.utils)
   (:gen-class))
 (set! *warn-on-reflection* true)
@@ -22,6 +24,7 @@
 (def ^:dynamic *rmq-port* (int 5672))
 (def ^:dynamic *rmq-items-queue*  "dataserver.items")
 (def ^:dynamic *rmq-submit-queue* "dataserver.submit")
+(def ^:dynamic *kill-timeout-sec* 5)
 
 (defbolt logger [] {:params [out]} [tuple collector] 
   (let [payload (.getString tuple 0)]
@@ -41,7 +44,7 @@
         spout      (spout-spec (spout-fn source) :p p)
         out-name   (str prefix "/out")
         out-bolt   (rmq/poster {:host *rmq-host* :port *rmq-port* :queue *rmq-items-queue*})
-        out        (bolt-spec {spout-name :shuffle} out-bolt :p p)]
+        out        (bolt-spec {spout-name :shuffle} out-bolt :p 1)]
     (log-message "Starting " prefix " TOPOLOGY")
     (topology 
       {spout-name spout} 
@@ -54,11 +57,11 @@
         out-bolt (rmq/poster {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*})
         pipeline {
           "pipeline/apply-rules"     
-            (bolt-spec {"pipeline/in" :shuffle} (rules/apply-rules rules) :p 6)
+            (bolt-spec {"pipeline/in" :shuffle} (rules/apply-rules rules) :p 2)
           "pipeline/to-payload"      
-            (bolt-spec {"pipeline/apply-rules" :shuffle} as/json->payload :p 6)
+            (bolt-spec {"pipeline/apply-rules" :shuffle} as/json->payload :p 2)
           "pipeline/out" 
-            (bolt-spec {"pipeline/to-payload" :shuffle} out-bolt :p 6)
+            (bolt-spec {"pipeline/to-payload" :shuffle} out-bolt :p 1)
         }]
     (topology
       {"pipeline/in" spout}
@@ -68,26 +71,32 @@
   (log-message "Starting SUBMIT TOPOLOGY")
   (topology
     {"submit/in"       (spout-spec (rmq/reader {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*}))}
-    {"submit/out-echo" (bolt-spec {"submit/in" :shuffle} (EchoSubmitBolt.) :p 6)
-     "submit/out-file" (bolt-spec {"submit/in" :shuffle} (logger "log/submitted.log") :p 6)}))
+    (merge
+      {"submit/out-echo" (bolt-spec {"submit/in" :shuffle} (EchoSubmitBolt.) :p 10)}
+      (if config/*debug*
+        {"submit/out-file" (bolt-spec {"submit/in" :shuffle} (logger "log/submitted.log") :p 1)}
+        {}))))
 
-(defn run-local! []
-  (let [env     "local"
-        cluster (LocalCluster.)
-        args    {TOPOLOGY-DEBUG false}
-        config  (config/load-config (str "conf/" env ".config"))]
-    (doseq [source (:sources config)
-            :let [name (str "ds-drink---" (:type source) "---" (:name source))]]
-      (.submitTopology cluster name        args (top-drinker source)))
-    (.submitTopology cluster "ds-submit"   args (top-submit config))
-    (.submitTopology cluster "ds-pipeline" args (top-pipeline config))
-))
+(defn topologies [env]
+  (let [config (config/load-config (str "conf/" env ".config"))
+        build  (config/build)]
+    (into {} (merge
+      (for [source (:sources config)]
+        [(str build "__drink__" (:name source) "__" (hash source)) (top-drinker source)])
+      [(str build "__submit") (top-submit config)]
+      [(str build "__pipeline__" (hash (:rules config))) (top-pipeline config)]))))
+
+(defn run-local! [env]
+  (let [cluster (LocalCluster.)
+        args    {TOPOLOGY-DEBUG false}]
+    (doseq [[name top] (topologies env)]
+      (.submitTopology cluster name args top))))
+
+(declare topsync)
 
 (defn -main
-  ([] (run-local!))
-  ([host]
-    (binding [*rmq-host* host]
-      (run-local!))))
+  ([] (run-local! "local"))
+  ([env] (topsync env)))
 
 ; REPL stuff
 
@@ -96,3 +105,52 @@
 (use 'echo.dataserver.twitter)
 (use 'echo.dataserver.rules)
 (use 'echo.dataserver.config)
+
+
+(defn -toplist [^Nimbus$Client nimbus]
+  (let [cluster-info (.getClusterInfo nimbus)
+        topologies   (.get_topologies cluster-info)]
+    (into {} 
+      (for [^TopologySummary t topologies]
+           [(.get_name t) {:status  (keyword (.get_status t))
+                           :tasks   (.get_num_tasks t)
+                           :workers (.get_num_workers t)
+                           :uptime  (.get_uptime_secs t)}]))))
+
+(defn toplist []
+  (with-configured-nimbus-connection nimbus
+    (-toplist nimbus)))
+
+(defn -kill [^Nimbus$Client nimbus name]
+  (let [opts (KillOptions.)]
+    (.set_wait_secs opts *kill-timeout-sec*)
+    (.killTopologyWithOpts nimbus name opts)
+    (log-message "Killed topology: " name)))
+
+(defn kill
+  ([]
+    (with-configured-nimbus-connection nimbus
+      (doseq [name (keys (-toplist nimbus))]
+        (-kill nimbus name))))
+  ([name]
+    (with-configured-nimbus-connection nimbus
+      (-kill nimbus name))))
+
+(defn topsync [env]
+  (with-configured-nimbus-connection nimbus
+    (let [args {TOPOLOGY-DEBUG false
+                Config/TOPOLOGY_MESSAGE_TIMEOUT_SECS *kill-timeout-sec*}
+          tops    (topologies env)
+          torun   (set (keys tops))
+          running (set (keys (-toplist nimbus)))]
+      (log-message "Killing topologies out of sync")
+      (doseq [name (set/difference running torun)]
+        (-kill nimbus name))
+      (log-message "Waiting for topologies to die")
+      (Thread/sleep (* 1000 *kill-timeout-sec*))
+      (log-message "Starting new topologies")
+      (doseq [name (set/difference torun running)]
+        (log-message "Starting topology: " name)
+        (StormSubmitter/submitTopology name args (tops name)))
+      (log-message "Synchronization finished"))))
+

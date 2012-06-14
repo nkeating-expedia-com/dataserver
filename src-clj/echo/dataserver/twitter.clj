@@ -5,7 +5,8 @@
            [backtype.storm.utils Utils])
   (:require [clojure.string :as str]
             [clojure.data.json :as json]
-            [http.async.client :as httpc])
+            [http.async.client :as httpc]
+            [echo.dataserver.config :as config])
   (:gen-class))
 (set! *warn-on-reflection* true)
 
@@ -83,7 +84,8 @@
         (when (and (not (str/blank? content))
                    (= 0 (rand-int (get source-config :sieve 1))))
           (log-debug "Tweet DRINKED: " (str-head content 100) "...")
-          (spit "log/tweets.log" content :append true)
+          (when config/*debug*
+            (spit "log/tweets.log" content :append true))
           (callback content))))))
 
 (defn tweet->records [tweet source-config]

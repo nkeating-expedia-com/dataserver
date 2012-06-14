@@ -17,3 +17,4 @@ twitter_jskithttp_sample.json
 log
 sftp-config.json
 *.swp
+*.log
