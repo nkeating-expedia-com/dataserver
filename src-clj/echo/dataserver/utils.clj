@@ -7,7 +7,7 @@
       (initialValue []
         ~@body))))
 
-(defn now []
+(defn now ^java.util.Date []
   (java.util.Date.))
 
 (defn env [v]

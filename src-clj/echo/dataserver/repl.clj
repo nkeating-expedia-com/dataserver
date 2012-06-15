@@ -3,7 +3,6 @@
     [backtype.storm StormSubmitter LocalCluster Config]
     [backtype.storm.generated TopologySummary Nimbus$Client KillOptions]
     [echo.dataserver EchoSubmitBolt])
-
   (:require
     [echo.dataserver.twitter :as twitter]
     [echo.dataserver.rules :as rules]
@@ -26,7 +25,7 @@
 (def ^:dynamic *rmq-submit-queue* "dataserver.submit")
 (def ^:dynamic *kill-timeout-sec* 5)
 
-(defbolt logger [] {:params [out]} [tuple collector] 
+(defbolt fs-logger [] {:params [out]} [tuple collector] 
   (let [payload (.getString tuple 0)]
     (spit out payload :append true)
     (ack! collector tuple)))
@@ -74,11 +73,11 @@
     (merge
       {"submit/out-echo" (bolt-spec {"submit/in" :shuffle} (EchoSubmitBolt.) :p 10)}
       (if config/*debug*
-        {"submit/out-file" (bolt-spec {"submit/in" :shuffle} (logger "log/submitted.log") :p 1)}
+        {"submit/out-file" (bolt-spec {"submit/in" :shuffle} (fs-logger "log/submitted.log") :p 1)}
         {}))))
 
-(defn topologies [env]
-  (let [config (config/load-config (str "conf/" env ".config"))
+(defn topologies [cfg]
+  (let [config (config/load-config cfg)
         build  (config/build)]
     (into {} (merge
       (for [source (:sources config)]
@@ -86,26 +85,11 @@
       [(str build "__submit") (top-submit config)]
       [(str build "__pipeline__" (hash (:rules config))) (top-pipeline config)]))))
 
-(defn run-local! [env]
+(defn run-local! [cfg]
   (let [cluster (LocalCluster.)
         args    {TOPOLOGY-DEBUG false}]
-    (doseq [[name top] (topologies env)]
+    (doseq [[name top] (topologies cfg)]
       (.submitTopology cluster name args top))))
-
-(declare topsync)
-
-(defn -main
-  ([] (run-local! "local"))
-  ([env] (topsync env)))
-
-; REPL stuff
-
-(use 'echo.dataserver.activitystream)
-(use 'echo.dataserver.xml)
-(use 'echo.dataserver.twitter)
-(use 'echo.dataserver.rules)
-(use 'echo.dataserver.config)
-
 
 (defn -toplist [^Nimbus$Client nimbus]
   (let [cluster-info (.getClusterInfo nimbus)
@@ -136,11 +120,11 @@
     (with-configured-nimbus-connection nimbus
       (-kill nimbus name))))
 
-(defn topsync [env]
+(defn topsync [cfg]
   (with-configured-nimbus-connection nimbus
     (let [args {TOPOLOGY-DEBUG false
                 Config/TOPOLOGY_MESSAGE_TIMEOUT_SECS *kill-timeout-sec*}
-          tops    (topologies env)
+          tops    (topologies cfg)
           torun   (set (keys tops))
           running (set (keys (-toplist nimbus)))]
       (log-message "Killing topologies out of sync")
@@ -154,3 +138,15 @@
         (StormSubmitter/submitTopology name args (tops name)))
       (log-message "Synchronization finished"))))
 
+
+(defn -main
+  ([] (run-local! "conf/local.config"))
+  ([cfg] (topsync cfg)))
+
+; REPL stuff
+
+(use 'echo.dataserver.activitystream)
+(use 'echo.dataserver.xml)
+(use 'echo.dataserver.twitter)
+(use 'echo.dataserver.rules)
+(use 'echo.dataserver.config)

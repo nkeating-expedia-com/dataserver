@@ -32,12 +32,24 @@
                                        :id  parent-id})
       item)))
 
+(defn unwrap-content [tweet]
+  (let [{{:keys [urls hashtags user_mentions media]} :entities} tweet
+        replacements 
+          (concat
+            (for [{href :expanded_url, text :display_url, [f t] :indices} urls]
+                 [f t (str "<a href='" href "'>" text "</a>")])
+            (for [{href :expanded_url, src :media_url_https, {{h :h w :w} :small} :sizes, [f t] :indices} media]
+                 [f t (str "\n<a href='" href "'><img src='" src "' width='" w "' height='" h "'/></a>\n")]))]
+    (reduce (fn [s [f t r]] (str (subs s 0 f) r (subs s t)))
+            (:text tweet)
+            (reverse (sort replacements)))))
+
 (defn tweet-content [tweet]
   (if-let [source-tweet (:retweeted_status tweet)]
-    (let [{{author :screen_name} :user
-           text                  :text} source-tweet]
+    (let [author (get-in source-tweet [:user :screen_name])
+          text   (unwrap-content source-tweet)]
       (str "RT @" author ": " text))
-  (:text tweet)))
+  (unwrap-content tweet)))
 
 (defn tweet->item [tweet]
   (let [{:keys [text id user created_at source] :or {source "web"}} tweet
@@ -93,7 +105,8 @@
     (for [item (tweet->items tweet)]
       {:record-id (get-in item [:object :id])
        :source    {:type "twitter", :name (:name source-config)}
-       :item      item})))
+       :item      item
+       :timestamp (.getTime (now))})))
 
 (def reader-threads (atom {}))
 
