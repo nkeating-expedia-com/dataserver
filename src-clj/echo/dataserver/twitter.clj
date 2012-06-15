@@ -32,7 +32,7 @@
                                        :id  parent-id})
       item)))
 
-(defn unwrap-content [tweet]
+(defn expand-tco [tweet]
   (let [{{:keys [urls hashtags user_mentions media]} :entities} tweet
         replacements 
           (concat
@@ -47,9 +47,9 @@
 (defn tweet-content [tweet]
   (if-let [source-tweet (:retweeted_status tweet)]
     (let [author (get-in source-tweet [:user :screen_name])
-          text   (unwrap-content source-tweet)]
+          text   (expand-tco source-tweet)]
       (str "RT @" author ": " text))
-  (unwrap-content tweet)))
+  (expand-tco tweet)))
 
 (defn tweet->item [tweet]
   (let [{:keys [text id user created_at source] :or {source "web"}} tweet

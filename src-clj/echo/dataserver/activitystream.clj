@@ -17,57 +17,42 @@
 (defn format-date [^java.util.Date date]
   (.format ^SimpleDateFormat (.get ^ThreadLocal date-formatter) date))
 
-(def default-object
-  {:object-type "note"
-   :source {:name "DataServer source"
-            :icon "http://cdn.js-kit.com/images/echo.png"
-            :uri  "http://aboutecho.com/"}})
-(def default-actor 
-  {:object-type "person"})
-(def default-entry 
-  {:verb "post"})
-
 (defn target [t]
   [:target {:ns :activity}
     [:id (:url t)]])
 
 (defn entry [record]
-  (let [item   (:item record)
-        {:keys [object actor targets source]} item
-        object (merge default-object object)
-        actor  (merge default-actor  actor)
-        entry  (merge default-entry {:object object, :actor actor, :targets targets, :source source})
-        content (get-in entry [:object :content])
-        content (if config/*debug* 
-                  (str "source: " (get-in record [:source :name]) "\n"
-                       "rule: "   (get-in record [:rule :name])   "\n"
-                       "user: "   (get-in item   [:actor :name])  "\n\n"
-                       content) 
-                  content)]
+  (let [item (-> (:item record)
+                 (update-in [:verb] #(or % "post"))
+                 (update-in [:object :object-type] #(or % "note"))
+                 (update-in [:object :source] #(or % {:name "DataServer source"
+                                                      :icon "http://cdn.js-kit.com/images/echo.png"
+                                                      :uri  "http://aboutecho.com/"}))
+                 (update-in [:actor :object-type] #(or % "person")))]
     (concat
       [:entry
-        [:published (format-date (or (:published entry) (now)))]
-        [:updated   (format-date (or (:updated entry)   (now)))]
-        [:verb {:ns :activity} (:verb entry)]
+        [:published (format-date (or (:published item) (now)))]
+        [:updated   (format-date (or (:updated item)   (now)))]
+        [:verb {:ns :activity} (:verb item)]
         [:source 
           [:provider {:ns "service"}
-            [:name (get-in entry [:source :name])]
-            [:uri  (get-in entry [:source :url])]
-            [:icon (get-in entry [:source :icon])]]]
+            [:name (get-in item [:source :name])]
+            [:uri  (get-in item [:source :url])]
+            [:icon (get-in item [:source :icon])]]]
         [:object {:ns :activity}
-          [:object-type {:ns :activity} (get-in entry [:object :object-type])]
-          [:id          {:ns :activity} (get-in entry [:object :url])]
-          [:content     {"type" "html"} content]
-          [:link        {"rel" "alternate" "type" "text/html" "href" (get-in entry [:object :url])}]
-          [:source      {"type" "html"} (get-in entry [:object :source])]]
+          [:object-type {:ns :activity} (get-in item [:object :object-type])]
+          [:id          {:ns :activity} (get-in item [:object :url])]
+          [:content     {"type" "html"} (get-in item  [:object :content])]
+          [:link        {"rel" "alternate" "type" "text/html" "href" (get-in item [:object :url])}]
+          [:source      [:title {"type" "html"} (get-in item [:object :source])]]]
         [:actor {:ns :activity}
-          [:object-type {:ns :activity} (get-in entry [:actor :object-type])]
-          [:id          (get-in entry [:actor :url])]
-          [:title       (get-in entry [:actor :displayName])]
-          [:link {"rel" "avatar"    "type" "image/jpeg" "href" (get-in entry [:actor :avatar])}]
-          [:link {"rel" "alternate" "type" "text/html"  "href" (get-in entry [:actor :url])}]
+          [:object-type {:ns :activity} (get-in item [:actor :object-type])]
+          [:id          (get-in item [:actor :url])]
+          [:title       (get-in item [:actor :displayName])]
+          [:link {"rel" "avatar"    "type" "image/jpeg" "href" (get-in item [:actor :avatar])}]
+          [:link {"rel" "alternate" "type" "text/html"  "href" (get-in item [:actor :url])}]
         ]]
-      (mapv target (:targets entry)))
+      (mapv target (:targets item)))
     ))
 
 (defn feed [entries]

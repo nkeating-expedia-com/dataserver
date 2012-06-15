@@ -44,13 +44,11 @@
         out-name   (str prefix "/out")
         out-bolt   (rmq/poster {:host *rmq-host* :port *rmq-port* :queue *rmq-items-queue*})
         out        (bolt-spec {spout-name :shuffle} out-bolt :p 1)]
-    (log-message "Starting " prefix " TOPOLOGY")
     (topology 
       {spout-name spout} 
       {out-name   out})))
 
 (defn top-pipeline [config]
-  (log-message "Starting PIPELINE TOPOLOGY")
   (let [rules    (:rules config)
         spout    (spout-spec (rmq/reader {:host *rmq-host* :port *rmq-port* :queue *rmq-items-queue*}))
         out-bolt (rmq/poster {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*})
@@ -67,7 +65,6 @@
       pipeline)))
 
 (defn top-submit [config]
-  (log-message "Starting SUBMIT TOPOLOGY")
   (topology
     {"submit/in"       (spout-spec (rmq/reader {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*}))}
     (merge
@@ -76,14 +73,17 @@
         {"submit/out-file" (bolt-spec {"submit/in" :shuffle} (fs-logger "log/submitted.log") :p 1)}
         {}))))
 
+(defn- hexhash [obj]
+  (-> obj hash Math/abs Long/toHexString))
+
 (defn topologies [cfg]
   (let [config (config/load-config cfg)
         build  (config/build)]
     (into {} (merge
       (for [source (:sources config)]
-        [(str build "__drink__" (:name source) "__" (hash source)) (top-drinker source)])
-      [(str build "__submit") (top-submit config)]
-      [(str build "__pipeline__" (hash (:rules config))) (top-pipeline config)]))))
+        [(str build "--drink--" (:name source) "--" (hexhash source)) (top-drinker source)])
+      [(str build "--submit") (top-submit config)]
+      [(str build "--pipeline--" (hexhash (:rules config))) (top-pipeline config)]))))
 
 (defn run-local! [cfg]
   (let [cluster (LocalCluster.)

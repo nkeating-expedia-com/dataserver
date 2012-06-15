@@ -4,7 +4,7 @@
 
 (def ^:dynamic *debug* false)
 
-(defn build [] 6)
+(defn build [] 7)
 
 (defn load-config [name]
   (read-string (slurp name)))
