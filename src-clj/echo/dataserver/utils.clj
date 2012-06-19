@@ -10,6 +10,9 @@
 (defn now ^java.util.Date []
   (java.util.Date.))
 
+(defn now-ts []
+  (System/currentTimeMillis))
+
 (defn env [v]
   (-> (System/getenv) (.get v)))
 

@@ -72,16 +72,18 @@
           [:icon "http://cdn.js-kit.com/images/echo.png"]]]
       entries)])
 
-(defn json->xml [record]
+(defn as->xml [record]
   (let [_entries [(entry record)]
         _feed    (feed _entries)]
     (with-out-str
       (xml/emit _feed))))
 
-(defbolt json->payload ["payload"] [tuple collector] 
+(defbolt as->payload ["payload"] [tuple collector] 
   (let [record  (read-string (.getString tuple 0))
-        _xml    (json->xml record)
-        record  (-> record (dissoc :item) (assoc :xml _xml))
+        _xml    (as->xml record)
+        record  (-> record 
+                    (dissoc :item)
+                    (assoc  :xml _xml))
         payload (json/json-str record)]
     (emit-bolt! collector [payload] :anchor tuple)
     (ack! collector tuple)))

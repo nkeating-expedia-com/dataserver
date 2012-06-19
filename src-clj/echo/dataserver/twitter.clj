@@ -1,8 +1,8 @@
 (ns echo.dataserver.twitter
-  (:use [backtype.storm clojure log]
-        [echo.dataserver utils])
-  (:import [java.text SimpleDateFormat]
-           [backtype.storm.utils Utils])
+  (:use     [backtype.storm clojure log]
+            [echo.dataserver utils])
+  (:import  [java.text SimpleDateFormat]
+            [backtype.storm.utils Utils])
   (:require [clojure.string :as str]
             [clojure.data.json :as json]
             [http.async.client :as httpc]
@@ -103,10 +103,10 @@
 (defn tweet->records [tweet source-config]
   (let [tweet (json/read-json tweet)]
     (for [item (tweet->items tweet)]
-      {:record-id (get-in item [:object :id])
-       :source    {:type "twitter", :name (:name source-config)}
-       :item      item
-       :timestamp (.getTime (now))})))
+      {:record-id  (get-in item [:object :id])
+       :source     {:type "twitter", :name (:name source-config)}
+       :item       item
+       :timestamps {:source-out (now-ts)}})))
 
 (def reader-threads (atom {}))
 

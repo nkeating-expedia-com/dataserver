@@ -1,12 +1,12 @@
 (ns echo.dataserver.repl
   (:import
     [backtype.storm StormSubmitter LocalCluster Config]
-    [backtype.storm.generated TopologySummary Nimbus$Client KillOptions]
-    [echo.dataserver EchoSubmitBolt])
+    [backtype.storm.generated TopologySummary Nimbus$Client KillOptions])
   (:require
     [echo.dataserver.twitter :as twitter]
     [echo.dataserver.rules :as rules]
     [echo.dataserver.activitystream :as as]
+    [echo.dataserver.streamserver-api :as streamserver]
     [echo.dataserver.rmq :as rmq]
     [echo.dataserver.config :as config]
     [clojure.string :as str]
@@ -56,7 +56,7 @@
           "pipeline/apply-rules"     
             (bolt-spec {"pipeline/in" :shuffle} (rules/apply-rules rules) :p 2)
           "pipeline/to-payload"      
-            (bolt-spec {"pipeline/apply-rules" :shuffle} as/json->payload :p 2)
+            (bolt-spec {"pipeline/apply-rules" :shuffle} as/as->payload :p 2)
           "pipeline/out" 
             (bolt-spec {"pipeline/to-payload" :shuffle} out-bolt :p 1)
         }]
@@ -68,13 +68,14 @@
   (topology
     {"submit/in"       (spout-spec (rmq/reader {:host *rmq-host* :port *rmq-port* :queue *rmq-submit-queue*}))}
     (merge
-      {"submit/out-echo" (bolt-spec {"submit/in" :shuffle} (EchoSubmitBolt.) :p 10)}
+      {"submit/out-echo" (bolt-spec {"submit/in" :shuffle} streamserver/submit-bolt :p 10)}
       (if config/*debug*
         {"submit/out-file" (bolt-spec {"submit/in" :shuffle} (fs-logger "log/submitted.log") :p 1)}
         {}))))
 
 (defn- hexhash [obj]
-  (-> obj hash Math/abs Long/toHexString))
+  (let [^int h (hash obj)]
+    (-> h Math/abs Integer/toHexString)))
 
 (defn topologies [cfg]
   (let [config (config/load-config cfg)
